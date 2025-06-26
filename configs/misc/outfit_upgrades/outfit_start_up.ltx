@@ -1,0 +1,87 @@
+; шаблон скрипт-секции
+[st_armor]
+precondition_functor	= inventory_upgrades.precondition_functor_a
+precondition_parameter	= a & b
+effect_functor			= inventory_upgrades.effect_functor_a
+effect_parameter		= something_here
+prereq_functor			= inventory_upgrades.prereq_functor_a
+prereq_tooltip_functor	= inventory_upgrades.prereq_tooltip_functor_a
+prereq_params			= money(1000), item(habar)
+scheme_index			= 6, 0
+known					= 1
+effects					=
+section					= st_sect_NAME
+property				= prop_NAME
+name					= 
+description				= 
+icon					= 
+
+
+; карман 1
+[st_sect_art]
+cost					=
+inv_weight				= 0
+
+[st_art]:st_armor
+section					= st_sect_art
+property				= prop_artefact
+
+[st_gr_art]
+elements				= st_art
+
+
+; карман 2
+[st_sect_art2]
+cost					=
+inv_weight				= 0
+
+[st_art2]:st_armor
+section					= st_sect_art2
+property				= prop_artefact
+
+[st_gr_art2]
+elements				= st_art2
+
+
+; ПНВ
+[st_sect_nv]
+cost					=
+value					= 1
+inv_weight				= 0
+
+[st_nv]:st_armor
+section					= st_sect_nv
+property				= prop_night_vision
+
+[st_gr_nv]
+elements				= st_nv
+
+
+; + вес
+[st_sect_wt]
+cost							=
+value							= +30
+additional_inventory_weight		= 0
+additional_inventory_weight2	= 0
+
+[st_wt]:st_armor
+section					= st_sect_wt
+property				= prop_tonnage
+
+[st_gr_wt]
+elements				= st_wt
+
+
+; + вес 2
+[st_sect_wt2]
+cost							=
+value							= +40
+additional_inventory_weight		= 0
+additional_inventory_weight2	= 0
+
+[st_wt2]:st_armor
+section					= st_sect_wt2
+property				= prop_tonnage
+
+[st_gr_wt2]
+elements				= st_wt2

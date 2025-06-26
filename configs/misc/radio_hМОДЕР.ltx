@@ -1,0 +1,60 @@
+[radio_h]
+; Базовые параметры
+GroupControlSection   = spawn_group
+discovery_dependency  = 
+$spawn                = "devices\radio_h"
+cform                 = skeleton
+class                 = D_EQUIP
+visual                = dynamics\devices\dev_fmradio\dev_fmradio.ogf
+
+; Обязательные параметры оборудования
+immunities_sect       = radio_h_immunities
+slot                  = 8                  ; Слот PDA
+default_to_ruck       = true               ; Автоматически в рюкзак
+sprint_allowed        = true               ; Разрешить спринт
+use_allowed           = true               ; Разрешить использование
+flash_allowed         = false              ; Запретить вспышки
+nightvision_allowed   = false              ; Запретить ПНВ
+
+; Параметры управления
+control_inertion_factor = 1.0              ; Фактор инерции управления (1.0 - стандартное значение)
+strafe_enabled        = true               ; Разрешить движение вбок
+turn_enabled          = true               ; Разрешить повороты
+
+; Настройки инвентаря
+cost                  = 1000
+description           = radio_h_descr
+inv_name              = radio_h
+inv_name_short        = radio_h
+inv_weight            = 0.7
+
+inv_grid_width   	  = 1
+inv_grid_height   	  = 2
+inv_grid_x      	  = 2
+inv_grid_y       	  = 39
+
+; Параметры использования
+script_binding        = call_help.init
+eat_health            = 0
+eat_satiety           = 0
+eat_power             = 0
+eat_radiation         = 0
+eat_alcohol           = 0
+wounds_heal_perc      = 0
+eat_portions_num      = 5                  ; 5 использований
+
+; Графика и анимация
+animation_slot        = 4                  ; Слот анимации устройств
+hud                   = wpn_vodka_hud
+
+; Секция иммунитетов
+[radio_h_immunities]
+burn_immunity          = 0.0
+strike_immunity        = 0.0
+shock_immunity         = 0.0
+wound_immunity         = 0.0
+radiation_immunity     = 0.0
+telepatic_immunity     = 0.0
+chemical_burn_immunity = 0.0
+explosion_immunity     = 0.0
+fire_wound_immunity    = 0.0
