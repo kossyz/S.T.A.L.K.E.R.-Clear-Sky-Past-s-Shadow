@@ -1,0 +1,242 @@
+;===========================================================================
+; FRACTURE
+;===========================================================================
+[m_fracture_e]:monster_base
+GroupControlSection	= spawn_group
+SpaceRestrictionSection = space_restrictor,zone_mosquito_bald,zone_witches_galantine,zone_burning_fuzz1,zone_mincer,zone_gravi_zone
+$npc			     = on						; option for Level Editor
+$prefetch 			 = 16
+Scheduled		     = on						; option for ALife Simulator
+Human		     	 = off 						; option for ALife Simulator
+Health			     = 200						; option for ALife Simulator
+MinSpeed		     = 1.0						; option for ALife Simulator
+MaxSpeed		     = 5.0						; option for ALife Simulator
+going_speed          = 4.5                      ; option for ALife Simulator
+search_speed         = 1.5                       ; option for ALife Simulator
+visual				 = monsters\izlom\izlom.ogf
+corpse_visual		 = monsters\izlom\izlom.ogf
+icon = ui_npc_monster_fracture	
+
+MaxHealthValue		 = 200			; range [0..200]
+DynamicObjectsCount	 = 32
+smart_terrain_choose_interval	= 00:15:00
+
+ef_creature_type	 = 3							; option for evaluation functions
+ef_weapon_type		 = 1
+ef_detector_type	 = 1
+panic_threshold		= 0.0
+
+cform                = skeleton					; collision class
+class                = SM_IZLOM					; AI class
+
+script_binding  = bind_monster.bind
+
+bone_torso			 = bip01_spine1 			; bone name
+bone_head			 = bip01_head				; bone name
+bone_fire			 = bip01_head				; bone name
+weapon_usage		 = 0						; boolean
+
+ph_box0_center 		 = 0.0,  0.9,  0.0
+ph_box0_size 		 = 0.35, 0.9,  0.35
+ph_box1_center 		 = 0.0,  0.6,  0.0
+ph_box1_size 		 = 0.40, 0.6,  0.40
+ph_crash_speed_min			= 10
+ph_crash_speed_max			= 30
+ph_collision_damage_factor	= 0.1
+ph_mass 		     = 80
+
+destroyed_vis_name	 = dynamics\Dead_Body\skelet_crash
+
+;---------------------------------------------------------------------
+ph_skeleton_airr_lin_factor   = -0.4
+ph_skeleton_airr_ang_factor   = -0.2
+ph_skeleton_hinger_factor1    = 1.0
+ph_skeleton_ddelay	      = 5.0
+ph_skel_fatal_impulse_factor  = 2.0
+ph_after_death_velocity_factor= 0.75
+ph_skel_shot_up_factor        = 0.25
+;---------------------------------------------------------------------
+
+SoundThreshold		 = 0.06             ; range [0..1]
+
+eye_fov				 = 100;
+eye_range			 = 100	;30
+max_hear_dist		 = 40
+
+;-------------------------------------------------------------------------
+; speed factors			linear | angular_real | angular_path | min |  max
+;-------------------------------------------------------------------------
+Velocity_Stand			= 0,		1.4,			1.4,		1,		1
+Velocity_WalkFwdNormal	= 0.9,		2.5,			2.5,		0.02,	2.0	
+Velocity_RunFwdNormal	= 3.0,		3.5,			3.5,		0.4,	1	
+Velocity_WalkFwdDamaged	= 0.7,		3.0,			3.0,		0.2,	2.0	
+Velocity_RunFwdDamaged	= 5.0,  	3.0,			3.0,		0.2,	1
+Velocity_Drag			= 1.0,		3.0,			3.0,		1,		1
+Velocity_Steal			= 1.5,		3.0,			3.0,		1,		1
+
+; acceleration
+Accel_Generic			= 1.5
+Accel_Calm			= 2.5
+Accel_Aggressive		= 7.5
+
+;attack parameters
+MinAttackDist		= 1.8	;0.5
+MaxAttackDist		= 2.4	;3.8
+
+as_min_dist				= 0.5
+as_step					= 0.5
+
+
+DayTime_Begin		= 0			; начало дня для монстра
+DayTime_End			= 21		; конец дня для монстра
+Min_Satiety			= 0.4		; мин. норма сытости (меньше - уже голодный)
+Max_Satiety			= 1.0		; макс. норма сытости (больше - очень сытый)
+
+distance_to_corpse	= 1.2		; дист. до трупа, при которой он переходит в состояние еды
+
+min_view_distance   		= 0.8				; коэффициент, который множится на eye_range, в зависимости от угла
+max_view_distance	 		= 1.0				; коэффициент, который множится на eye_range, в зависимости от угла
+visibility_threshold	 	= 100.0				; значение, при достижении суммой которого объект считается видимым
+always_visible_distance 	= 0.3                                ; всегда видимое расстояние
+time_quant					= 0.001
+decrease_value				= 0.01				; значение, на которое уменьшается вес, если объект попал в фрустум, но отсёкся по каким-то причинам
+velocity_factor		     	= 0.5                                ; коэффициент скорости
+luminocity_factor			= 1.5 				; фактор освещения (только для Актёра)
+transparency_threshold		= 0.25				; видимость через камыши и кустарники
+
+terrain				 = fracture_terrain
+
+hit_type = wound
+
+; entity condition
+satiety_v 		= 0.00001				;0.01			;скорость уменьшения сытости со временем
+radiation_v 		= 0.00001		;0.004			;скорость уменьшения радиации
+satiety_power_v 	= 0.005		;0.01			;увеличение силы при уменьшении сытости 
+satiety_health_v 	= 0.0001	;0.03			;увеличение здоровья при уменьшении сытости 
+satiety_critical 	= -1.0		;0.25			;критическое значение сытости (в процентах от 0..1) когда здоровье начинает уменьшаться
+radiation_health_v 	= 0.01	;0.006			;уменьшение здоровья при воздействии радиации
+morale_v		= 0.01					;скорость восстановления морали
+health_hit_part 	= 1.0		;0.8			;процент хита, уходящий на отнимание здоровья
+power_hit_part 		= 1.0		;0.9			;процент хита, уходящий на отнимание силы
+psy_health_v = 0.1						;скорость восстановления psy-здоровья
+
+immunities_sect				= fracture_immunities
+
+;открытые раны
+bleeding_v					= 0.01						;потеря крови при номинальной ране в секунду
+wound_incarnation_v			= 0.01				;крутизна кривой заживления (какой процент раны останется после заживления в игровую секунду)
+min_wound_size				= 0.01
+
+sleep_health = 1.0		;1.5				;коэффициенты скоростей изменения параметров во время сна
+sleep_power = 1.0		;1.5
+sleep_satiety = 1.0		;0.8
+sleep_radiation = 1.0	;1.1
+sleep_psy_health = 1.0
+
+eat_freq			=	5.0		; частота укусов в сек
+eat_slice			=	0.01	; увеличение сытости при 1 укусе
+eat_slice_weight	=	10.0	; уменьшение еды у трупа
+
+satiety_threshold	= 0.5	           ; ниже этого значения монстр считается голодным
+
+; Morale
+Morale_Hit_Quant				= 0.001
+Morale_Attack_Success_Quant		= 0.1
+Morale_Take_Heart_Speed			= 0.1
+Morale_Despondent_Speed			= 0.1
+Morale_Stable_Speed				= 0.01
+Morale_Despondent_Threashold	= 0.5
+
+;----------------------------------------------------------------------------------------
+; Sounds
+;----------------------------------------------------------------------------------------
+sound_idle				= monsters\izlom\idle_ 
+sound_eat				= monsters\zombie\zombie_eat_ 
+sound_aggressive			= monsters\izlom\rising_
+sound_attack_hit		= monsters\zombie\zombie_attack_hit_
+sound_take_damage		= monsters\izlom\damage_
+sound_die				= monsters\izlom\death_
+sound_threaten			= monsters\biting\def_		
+sound_landing			= monsters\biting\def_
+sound_steal				= monsters\biting\def_
+sound_panic				= monsters\izlom\rising_
+sound_growling			= monsters\izlom\enemy_
+sound_die_in_anomaly	= monsters\izlom\death_1
+
+killer_clsids			= Z_MINCER,Z_GALANT,ZS_BFUZZ,ZS_MBALD,ZS_GALAN,ZS_MINCE
+
+idle_sound_delay		= 125000
+eat_sound_delay			= 3000
+attack_sound_delay		= 4000
+
+sound_distant_idle			= monsters\izlom\idle_
+distant_idle_sound_delay	= 80000
+distant_idle_sound_range	= 100.0	
+
+DamagedThreshold		= 0.5
+critical_wound_threshold		= 0.1
+critical_wound_decrease_quant	= 0.
+
+material				= creatures\medium
+
+squad_attack_algorithm	= 1
+LegsCount				= 2
+
+attack_effector			= m_zombie_attack_effector
+attack_params			= m_fracture_attack_params
+step_params				= m_fracture_step_params
+damage					= m_Fracture_damage
+
+species					= bloodsucker ;fracture
+
+[m_Fracture_damage]
+;bone_name		 = <hit_scale>,-1,<wound_scale>
+;<hit_scale>	- коэфф. изменения хита (уменьшения здоровья) 
+;<wound_scale>	- коэфф. изменения величины открытой раны
+
+default				= 0.01,	-1,	0.01
+
+bip01_pelvis 		= 0.01, -1, 0.01
+bip01_spine 		= 0.01, -1, 0.01
+bip01_spine1 		= 0.01, -1, 0.01
+bip01_neck 			= 0.03, -1, 0.01
+bip01_head 			= 0.03, -1, 0.01
+
+[fracture_terrain]
+  255,000,255,255
+
+[m_fracture_attack_params]
+;---------------------------------------------------------------------------------------------------------------------------------------------
+;	anim			| time[0..1] | hit_power | impulse | impulse_dir (x,y,z)  |	Field of hit_test  (left,right, bottom, top ) |	Test Dist
+;---------------------------------------------------------------------------------------------------------------------------------------------
+stand_attack_0 =	  	0.45,		0.40,		    100,        0.0, 1.0, 0.0,		 -1.6, 1.6, -1.6, 1.6,							  3.5
+stand_attack_1 =	  	0.45,		0.40,		    140,        0.0, 1.0, 0.0,		 -1.6, 1.6, -1.6, 1.6,							  3.5
+stand_attack_2 =	  	0.45,		0.60,		    120,        0.0, 1.0, 0.0,		 -1.6, 1.6, -1.6, 1.6,							  3.5
+
+[m_fracture_step_params]
+;---------------------------------------------------------------------------
+;	anim			| Cycles | time1 | power1 | time2 | power2 |
+;---------------------------------------------------------------------------
+stand_walk_fwd_0 	=	1,	   0.01,     1,     0.25,    0.7,   
+stand_run_fwd_0	 	=	1,	   0.01,     1,	    0.25,    0.6,    
+
+;===========================================================================
+; IMMUNITIES
+;===========================================================================
+[fracture_immunities]
+burn_immunity						= 1.0				;коэффициенты иммунитета 
+strike_immunity						= 1.0
+shock_immunity						= 0.0
+wound_immunity						= 0.3
+radiation_immunity					= 0.0
+telepatic_immunity					= 0.0
+chemical_burn_immunity					= 0.0
+explosion_immunity					= 0.3
+fire_wound_immunity					= 0.2
+
+
+[fracture_weak]:m_fracture_e
+$spawn               = "monsters\fracture"				; option for Level Editor
+rank				= 255
+community			= fracture
+MaxHealthValue			= 160

@@ -1,0 +1,80 @@
+;===========================================================================
+; RAT
+;===========================================================================
+[m_rat_attack_params]
+;---------------------------------------------------------------------------------------------------------------------------------------------
+;	anim			| time[0..1] | hit_power | impulse | impulse_dir (x,y,z)  |	Field of hit_test  (left,right, bottom, top ) |	Test Dist
+;---------------------------------------------------------------------------------------------------------------------------------------------
+stand_attack_0 =	  	0.25,		0.28,	    20,        0.0, 1.0, 0.0,		 -1.2, 1.2, -1.6, 1.6,							  1.0
+stand_attack_1 =	  	0.25,		0.28,	    30,        0.0, 1.0, 0.0,		 -1.2, 1.2, -1.6, 1.6,							  1.0
+stand_attack_2 =	  	0.25,		0.28,	    35,        0.0, 1.0, 0.0,		 -1.2, 1.2, -1.6, 1.6,							  1.0
+
+[m_rat_e]:m_tushkano_e
+visual			= monsters\rat\rat_1
+corpse_visual		= monsters\rat\rat_1
+icon                    = ui_npc_monster_rat_1
+
+Health			= 50
+MaxHealthValue		= 50
+
+;----------------------------------------------------------------------------
+; speed factors			linear | angular_real 		| angular_path 		| min 		|  max
+;----------------------------------------------------------------------------
+Velocity_Stand			= 0,		3.5,			3.5,		1,		1
+Velocity_WalkFwdNormal		= 1.0,		7.5,			7.5,		0.02,		1.8	
+Velocity_RunFwdNormal		= 3.5,		3.5,			3.5,		0.3,		1	
+Velocity_WalkFwdDamaged		= 1.0,		4.5,			4.5,		0.2,		1.8	
+Velocity_RunFwdDamaged		= 2.0,  	3.0,			3.0,		0.5,		1
+Velocity_Drag			= 1.0,		3.0,			3.0,		1,		1
+Velocity_Steal			= 1.5,		3.0,			3.0,		1,		1
+
+
+attack_params			= m_rat_attack_params
+
+;---------------------------------------------------------
+; Sounds
+;---------------------------------------------------------
+sound_idle				= monsters\rat\idle_
+sound_eat				= monsters\rat\eat_
+sound_aggressive		= monsters\rat\attack_
+sound_attack_hit		= monsters\rat\attack_
+sound_take_damage		= monsters\rat\hit_
+sound_die				= monsters\rat\death_
+sound_threaten			= monsters\rat\threaten_
+sound_landing			= monsters\rat\hit_
+sound_steal				= monsters\rat\idle_
+sound_panic				= monsters\rat\panic_
+sound_growling			= monsters\rat\idle_
+sound_die_in_anomaly	= monsters\rat\death_
+sound_distant_idle			= monsters\rat\idle_
+
+panic_threshold		= 0.0
+
+immunities_sect				= rat_immunities
+
+[rat_immunities]
+burn_immunity 		= 0.0000001
+strike_immunity 	= 0.5
+shock_immunity 		= 0.5
+wound_immunity 		= 0.5
+radiation_immunity 	= 0.0000001
+telepatic_immunity 	= 0.0000001
+chemical_burn_immunity 	= 0.0000001
+explosion_immunity 	= 1.0
+fire_wound_immunity  	= 1.0
+
+[rat_1]:m_rat_e
+visual				 = monsters\rat\rat_1
+icon                    = ui_npc_monster_rat_1
+
+[rat_2]:m_rat_e
+visual				 = monsters\rat\rat_2
+icon                    = ui_npc_monster_rat_2
+
+[rat_3]:m_rat_e
+visual				 = monsters\rat\rat_3
+icon                    = ui_npc_monster_rat_3
+
+[rat_4]:m_rat_e
+visual				 = monsters\rat\rat_4
+icon                    = ui_npc_monster_rat_4
