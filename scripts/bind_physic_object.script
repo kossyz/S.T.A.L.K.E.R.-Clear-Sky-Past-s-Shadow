@@ -1,0 +1,192 @@
+function init(obj) -- called 1st
+
+	local ini = obj:spawn_ini()
+
+	-- Drop-boxes all have a [logic] section in vanilla, so are included without an explicit test:
+	if (ini and ini:section_exist("logic")) or obj:clsid() == clsid.inventory_box then
+		obj:bind_object(generic_physics_binder(obj))
+	end
+end
+
+--------------------------------------------------------------------------------
+
+class "generic_physics_binder" (object_binder)
+
+function generic_physics_binder:__init(obj) super(obj) -- called 2nd
+	self.initialized = false
+	self.loaded = false
+	self.particle = nil
+	self.box_items = nil
+	if obj:clsid() == clsid.inventory_box then
+		self.is_inventory_box = true
+		self.is_drop_box = false
+	else
+		local ini = obj:spawn_ini()
+		self.is_inventory_box = false
+		self.is_drop_box = ini ~= nil and ini:section_exist("drop_box")
+	end
+	self.st = {}
+end
+
+function generic_physics_binder:reload(section) -- called 3rd
+	object_binder.reload(self, section)
+end
+
+function generic_physics_binder:reinit() -- called 4th
+	object_binder.reinit(self)
+	db.storage[self.object:id()] = self.st
+end
+
+function generic_physics_binder:net_spawn(se_abstract) -- called 5th
+
+	if not object_binder.net_spawn(self, se_abstract) then
+		return false
+	end
+
+	local obj = self.object
+
+	db.add_obj(obj)
+
+	if self.is_drop_box then
+		self.box_items = xr_box.ph_item_box(obj)
+	end
+
+	return true
+end
+
+function generic_physics_binder:net_destroy()
+
+	self:clear_callbacks()
+
+	local obj = self.object
+	local obj_st = self.st
+
+	xr_sound.stop_sounds_by_id(obj:id())
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "net_destroy")
+	end
+
+	if self.particle ~= nil then
+		self.particle:stop()
+	end
+
+	db.del_obj(obj)
+
+	object_binder.net_destroy(self)
+end
+
+local object_binder_update = object_binder.update
+
+function generic_physics_binder:update(delta) -- called 6th
+
+	object_binder_update(self, delta)
+
+	local obj = self.object
+	local obj_st = self.st
+
+	if not self.initialized then
+		self.initialized = true
+		xr_logic.initialize_obj(obj, obj_st, self.loaded, modules.stype_item)
+		local particle = utils.cfg_get_string(obj_st.ini, obj_st.section_logic, "particle", nil, false, "", nil)
+		if particle ~= nil then
+			self.particle = particles_object(particle)
+			self.particle:play_at_pos(obj:position())
+		end
+		if obj_st.active_scheme or self.is_drop_box then
+			obj:set_callback(callback.hit, generic_physics_binder.hit_callback, self)
+			obj:set_callback(callback.death, generic_physics_binder.death_callback, self)
+			obj:set_callback(callback.use_object, generic_physics_binder.use_callback, self)
+		else
+			if self.is_inventory_box then
+				obj:set_callback(callback.use_object, generic_physics_binder.use_callback, self)
+			end
+		end
+	end
+
+	xr_sound.update(obj:id()) -- DC20231015
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "update", delta)
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function generic_physics_binder:clear_callbacks()
+	local obj = self.object
+	obj:set_callback(callback.hit, nil)
+	obj:set_callback(callback.death, nil)
+	obj:set_callback(callback.use_object, nil)
+end
+
+function generic_physics_binder:hit_callback(victim, amount, local_direction, hitter, bone_index)
+
+	local obj_st = self.st
+
+	if obj_st.ph_on_hit then
+		xr_logic.issue_event(nil, obj_st.ph_on_hit, "hit_callback", victim, amount, local_direction, hitter, bone_index)
+	end
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "hit_callback", victim, amount, local_direction, hitter, bone_index)
+	end
+end
+
+function generic_physics_binder:death_callback(victim, culprit)
+
+	self:clear_callbacks()
+
+	local obj_st = self.st
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "death_callback", victim, culprit)
+	end
+
+	if self.particle ~= nil then
+		self.particle:stop()
+	end
+
+	if self.is_drop_box then
+		self.box_items:spawn_items()
+	end
+end
+
+function generic_physics_binder:use_callback(used_obj, user)
+
+	if self.is_inventory_box then
+		if used_obj:name() == "gar_smart_terrain_5_6_box" then
+			local actor = db.actor
+			if actor:has_info("gar_quest_redemption_started") then
+				actor:give_info_portion("gar_quest_redemption_done")
+			end
+		end
+	end
+
+	local obj_st = self.st
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "use_callback", used_obj, user)
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function generic_physics_binder:net_save_relevant()
+	return true
+end
+
+function generic_physics_binder:save(packet)
+	set_save_marker(packet, "save", false, "physics_binder")
+	object_binder.save(self, packet)
+	xr_logic.save_obj(self.object, packet)
+	set_save_marker(packet, "save", true, "physics_binder")
+end
+
+function generic_physics_binder:load(reader) -- called 4.5th (only on load)
+	set_save_marker(reader, "load", false, "physics_binder")
+	object_binder.load(self, reader)
+	xr_logic.load_obj(self.object, reader)
+	set_save_marker(reader, "load", true, "physics_binder")
+	self.loaded = true
+end
