@@ -1,0 +1,141 @@
+; шаблон скрипт-секции
+[st_weapon]
+precondition_functor	= inventory_upgrades.precondition_functor_a
+precondition_parameter	= a & b
+effect_functor			= inventory_upgrades.effect_functor_a
+effect_parameter		= something_here
+prereq_functor			= inventory_upgrades.prereq_functor_a
+prereq_tooltip_functor	= inventory_upgrades.prereq_tooltip_functor_a
+prereq_params			= money(1000), item(habar)
+scheme_index			= 6, 0
+known					= 1
+effects					=
+section					= st_sect_NAME
+property				= prop_NAME
+name					= 
+description				= 
+icon					= 
+
+
+; планка "ласточкин хвост"
+[st_sect_rail_ussr]
+cost					=
+scope_zoom_factor		= 0
+
+[st_rail_ussr]:st_weapon
+section					= st_sect_rail_ussr
+property				= prop_rail_ussr
+
+[st_gr_rail_ussr]
+elements				= st_rail_ussr
+
+
+; планка Пикатинни
+[st_sect_rail_nato]
+cost					=
+scope_zoom_factor		= 0
+
+[st_rail_nato]:st_weapon
+section					= st_sect_rail_nato
+property				= prop_rail_nato
+
+[st_gr_rail_nato]
+elements				= st_rail_nato
+
+
+; прицел 2.4x - FN2K
+[st_sect_scope_2.4x]
+cost					=
+value					= "2.4x"
+scope_zoom_factor		= 0
+
+[st_scope_2.4x]:st_weapon
+section					= st_sect_scope_2.4x
+property				= prop_scope_base
+
+[st_gr_scope_2.4x]
+elements				= st_scope_2.4x
+
+
+; прицел 2.7x - РПГ-7
+[st_sect_scope_2.7x]
+cost					=
+value					= "2.7x"
+scope_zoom_factor		= 0
+
+[st_scope_2.7x]:st_weapon
+section					= st_sect_scope_2.7x
+property				= prop_scope_base
+
+[st_gr_scope_2.7x]
+elements				= st_scope_2.7x
+
+
+; прицел 3.6x - HK G36
+[st_sect_scope_3.6x]
+cost					=
+value					= "3.6x"
+scope_zoom_factor		= 0
+
+[st_scope_3.6x]:st_weapon
+section					= st_sect_scope_3.6x
+property				= prop_scope_base
+
+[st_gr_scope_3.6x]
+elements				= st_scope_3.6x
+
+
+; прицел 4x - L85
+[st_sect_scope_4x]
+cost					=
+value					= "4x"
+scope_zoom_factor		= 0
+
+[st_scope_4x]:st_weapon
+section					= st_sect_scope_4x
+property				= prop_scope_base
+
+[st_gr_scope_4x]
+elements				= st_scope_4x
+
+
+; прицел 8x - ВСС, СВУ
+[st_sect_scope_8x]
+cost					=
+value					= "8x"
+scope_zoom_factor		= 0
+
+[st_scope_8x]:st_weapon
+section					= st_sect_scope_8x
+property				= prop_scope_base
+
+[st_gr_scope_8x]
+elements				= st_scope_8x
+
+
+; прицел 12x - СВД
+[st_sect_scope_12x]
+cost					=
+value					= "12x"
+scope_zoom_factor		= 0
+
+[st_scope_12x]:st_weapon
+section					= st_sect_scope_12x
+property				= prop_scope_base
+
+[st_gr_scope_12x]
+elements				= st_scope_12x
+
+
+; прицел 24x - Гаусс
+[st_sect_scope_24x]
+cost					=
+value					= "24x"
+scope_zoom_factor		= 0
+
+[st_scope_24x]:st_weapon
+section					= st_sect_scope_24x
+property				= prop_scope_base
+
+[st_gr_scope_24x]
+elements				= st_scope_24x
