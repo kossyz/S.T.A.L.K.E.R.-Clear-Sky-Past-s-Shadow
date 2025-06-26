@@ -1,0 +1,245 @@
+#include "trade_template.ltx"
+
+[trader]
+buy_condition = {+gar_quest_liberate_conc_camp_done} trader_after_liberate, trader_generic_buy
+sell_condition = {+gar_quest_liberate_conc_camp_done} sell_after_liberate, trader_generic_sell
+buy_supplies = supplies_start
+
+[trader_generic_buy]:trade_nothing
+af_baloon                       = 0.5, 0.3
+af_blood                        = 0.5, 0.3
+af_cristall                     = 0.5, 0.3
+af_cristall_flower              = 0.5, 0.3
+af_dummy_battery                = 0.5, 0.3
+af_dummy_dummy                  = 0.5, 0.3
+af_dummy_glassbeads             = 0.5, 0.3
+af_electra_flash                = 0.5, 0.3
+af_electra_moonlight            = 0.5, 0.3
+af_electra_sparkler             = 0.5, 0.3
+af_eye                          = 0.5, 0.3
+af_fire                         = 0.5, 0.3
+af_fireball                     = 0.5, 0.3
+af_fuzz_kolobok                 = 0.5, 0.3
+af_glass                        = 0.5, 0.3
+af_gold_fish                    = 0.5, 0.3
+af_gravi                        = 0.5, 0.3
+af_ice                          = 0.5, 0.3
+af_medusa                       = 0.5, 0.3
+af_mincer_meat                  = 0.5, 0.3
+af_night_star                   = 0.5, 0.3
+af_soul                         = 0.5, 0.3
+af_vyvert                       = 0.5, 0.3
+
+ammo_11.43x23_fmj               = 0.5,  0.1
+ammo_11.43x23_hydro             = 0.5,  0.1
+ammo_12x70_buck                 = 0.5,  0.1
+ammo_12x76_dart                 = 0.5,  0.1
+ammo_12x76_zhekan               = 0.5,  0.1
+ammo_5.45x39_ap                 = 0.5,  0.1
+ammo_5.45x39_fmj                = 0.5,  0.1
+ammo_5.56x45_ap                 = 0.5,  0.1
+ammo_5.56x45_ss190              = 0.5,  0.1
+ammo_7.62x54_7h1                = 0.5,  0.1
+ammo_7.62x54_7h14               = 0.5,  0.1
+ammo_7.62x54_ap                 = 0.5,  0.1
+ammo_9x18_fmj                   = 0.5,  0.1
+ammo_9x18_pmm                   = 0.5,  0.1
+ammo_9x19_fmj                   = 0.5,  0.1
+ammo_9x19_pbp                   = 0.5,  0.1
+ammo_9x39_ap                    = 0.5,  0.1
+ammo_9x39_pab9                  = 0.5,  0.1
+ammo_9x39_sp5                   = 0.5,  0.1
+ammo_gauss                      = 0.25, 0.1 ; SRP
+ammo_m209                       = 0.5,  0.1
+ammo_og-7b                      = 0.5,  0.1
+ammo_pkm_100                    = 0.25, 0.1
+ammo_vog-25                     = 0.5,  0.1
+ammo_vog-25p                    = 0.5,  0.1
+grenade_f1                      = 0.5,  0.1
+grenade_rgd5                    = 0.5,  0.1
+
+wpn_addon_grenade_launcher      = 0.7, 0.2
+wpn_addon_grenade_launcher_m203 = 0.7, 0.2
+wpn_addon_scope                 = 0.7, 0.2
+wpn_addon_scope_susat           = 0.7, 0.2
+wpn_addon_silencer              = 0.7, 0.2
+
+antirad                         = 0.5, 0.3
+bandage                         = 0.5, 0.3
+medkit                          = 0.5, 0.3
+medkit_army                     = 0.5, 0.3
+medkit_scientic                 = 0.5, 0.3
+
+detector_advanced               = 0.7, 0.5
+detector_elite                  = 0.7, 0.5
+detector_simple                 = 0.7, 0.5
+device_pda                      = 1,   0.5
+guitar_a                        = 0.3, 0.1
+harmonica_a                     = 0.3, 0.1
+
+[trader_after_liberate]:trader_generic_buy
+wpn_abakan                      = 0.1, 0.05
+wpn_ak74                        = 0.1, 0.05
+wpn_ak74u                       = 0.1, 0.05
+wpn_beretta                     = 0.1, 0.05
+wpn_bm16                        = 0.1, 0.05
+wpn_colt1911                    = 0.1, 0.05
+wpn_desert_eagle                = 0.1, 0.05
+wpn_fn2000                      = 0.1, 0.05
+wpn_fort                        = 0.1, 0.05
+wpn_g36                         = 0.1, 0.05
+wpn_gauss                       = 0.1, 0.05 ; SRP
+wpn_groza                       = 0.1, 0.05
+wpn_hpsa                        = 0.1, 0.05
+wpn_l85                         = 0.1, 0.05
+wpn_lr300                       = 0.1, 0.05
+wpn_mp5                         = 0.1, 0.05
+wpn_pb                          = 0.1, 0.05
+wpn_pkm                         = 0.1, 0.05 ; SRP
+wpn_pm                          = 0.1, 0.05
+wpn_rg-6                        = 0.1, 0.05
+wpn_rpg7                        = 0.1, 0.05
+wpn_sig220                      = 0.1, 0.05
+wpn_sig550                      = 0.1, 0.05
+wpn_spas12                      = 0.1, 0.05
+wpn_svd                         = 0.1, 0.05
+wpn_svu                         = 0.1, 0.05
+wpn_toz34                       = 0.1, 0.05
+wpn_usp                         = 0.1, 0.05
+wpn_val                         = 0.1, 0.05
+wpn_vintorez                    = 0.1, 0.05
+wpn_walther                     = 0.1, 0.05
+wpn_wincheaster1300             = 0.1, 0.05
+
+bandit_outfit                   = 0.5, 0.3
+dolg_outfit                     = 0.5, 0.3
+exo_outfit                      = 0.5, 0.3
+military_outfit                 = 0.5, 0.3
+novice_outfit                   = 0.5, 0.3
+scientific_outfit               = 0.5, 0.3
+;soldier_outfit                 = 0.5, 0.3 ; no such item
+specops_outfit                  = 0.5, 0.3
+stalker_outfit                  = 0.5, 0.3
+svoboda_heavy_outfit            = 0.5, 0.3
+svoboda_light_outfit            = 0.5, 0.3
+
+stalker_outfit_up_stalk         = 0.5, 0.3
+wpn_abakan_up2                  = 0.1, 0.05
+wpn_ak74_up                     = 0.1, 0.05
+wpn_ak74_up2                    = 0.1, 0.05
+wpn_colt1911_up2                = 0.1, 0.05
+wpn_desert_eagle_up             = 0.1, 0.05 ; SRP
+wpn_fort_up                     = 0.1, 0.05
+wpn_g36_up2                     = 0.1, 0.05 ; SRP
+wpn_lr300_up2                   = 0.1, 0.05
+wpn_pm_9x19                     = 0.1, 0.05
+wpn_pm_up                       = 0.1, 0.05
+wpn_sig550_up2                  = 0.1, 0.05
+wpn_vintorez_up                 = 0.1, 0.05
+wpn_walther_up2                 = 0.1, 0.05 ; SRP
+
+[supplies_start]
+ammo_11.43x23_fmj               = 2, 0.7
+ammo_12x76_dart                 = 5, 0.7
+ammo_5.45x39_ap                 = 5, 0.7
+ammo_5.45x39_fmj                = 5, 0.7
+ammo_5.56x45_ap                 = 5, 0.7
+ammo_7.62x54_7h1                = 2, 0.7
+ammo_9x19_fmj                   = 1, 1 ; refuses to sell (initially) -> presumably for self-defense
+ammo_9x39_ap                    = 3, 0.7
+ammo_vog-25                     = 5, 0.5
+grenade_f1                      = 5, 0.5
+
+wpn_beretta                     = 1, 1 ; refuses to sell -> presumably for self-defense
+
+antirad                         = 5, 0.5
+medkit_army                     = 5, 0.5
+medkit_scientic                 = 2, 0.3
+
+detector_advanced               = 2, 0.7
+detector_elite                  = 2, 0.2
+detector_simple                 = 1, 1
+
+[trader_generic_sell]:trade_nothing
+ammo_11.43x23_fmj               = 2, 2
+ammo_11.43x23_hydro             = 2, 2
+ammo_12x70_buck                 = 2, 2
+ammo_12x76_dart                 = 2, 2
+ammo_12x76_zhekan               = 2, 2
+ammo_5.45x39_ap                 = 2, 2
+ammo_5.45x39_fmj                = 2, 2
+ammo_5.56x45_ap                 = 2, 2
+ammo_5.56x45_ss190              = 2, 2
+ammo_7.62x54_7h1                = 2, 2
+ammo_7.62x54_7h14               = 2, 2
+ammo_7.62x54_ap                 = 2, 2
+ammo_9x18_fmj                   = 2, 2
+ammo_9x18_pmm                   = 2, 2
+;ammo_9x19_fmj                  ;NO TRADE
+ammo_9x19_pbp                   = 2, 2
+ammo_9x39_ap                    = 2, 2
+ammo_9x39_pab9                  = 2, 2
+ammo_9x39_sp5                   = 2, 2
+ammo_gauss                      = 2, 2 ; SRP
+ammo_m209                       = 2, 2
+ammo_og-7b                      = 2, 2
+ammo_pkm_100                    = 2, 2 ; SRP
+ammo_vog-25                     = 2, 2
+ammo_vog-25p                    = 2, 2
+grenade_f1                      = 2, 2
+grenade_rgd5                    = 2, 2
+
+antirad                         = 1.5, 2
+bandage                         = 1.5, 2
+medkit                          = 1.5, 2
+medkit_army                     = 1.5, 2
+medkit_scientic                 = 1.5, 2
+
+bread                           = 1, 1 ; SRP
+conserva                        = 1, 1 ; SRP
+energy_drink                    = 1, 1 ; SRP
+kolbasa                         = 1, 1 ; SRP
+vodka                           = 1, 1 ; SRP
+
+detector_advanced               = 2,   3
+detector_elite                  = 2,   3
+detector_simple                 = 1.5, 2
+
+[sell_after_liberate]:trader_generic_sell
+ammo_11.43x23_fmj               = 1, 1.5
+ammo_11.43x23_hydro             = 1, 1.5
+ammo_12x70_buck                 = 1, 1.5
+ammo_12x76_dart                 = 1, 1.5
+ammo_12x76_zhekan               = 1, 1.5
+ammo_5.45x39_ap                 = 1, 1.5
+ammo_5.45x39_fmj                = 1, 1.5
+ammo_5.56x45_ap                 = 1, 1.5
+ammo_5.56x45_ss190              = 1, 1.5
+ammo_7.62x54_7h1                = 1, 1.5
+ammo_7.62x54_7h14               = 1, 1.5
+ammo_7.62x54_ap                 = 1, 1.5
+ammo_9x18_fmj                   = 1, 1.5
+ammo_9x18_pmm                   = 1, 1.5
+ammo_9x19_fmj                   = 1, 1.5
+ammo_9x19_pbp                   = 1, 1.5
+ammo_9x39_ap                    = 1, 1.5
+ammo_9x39_pab9                  = 1, 1.5
+ammo_9x39_sp5                   = 1, 1.5
+ammo_gauss                      = 1, 1.5 ; SRP
+ammo_m209                       = 1, 1.5
+ammo_og-7b                      = 1, 1.5
+ammo_pkm_100                    = 1, 1.5 ; SRP
+ammo_vog-25                     = 1, 1.5
+ammo_vog-25p                    = 1, 1.5
+grenade_f1                      = 1, 1.5
+grenade_rgd5                    = 1, 1.5
+
+antirad                         = 1, 1.5
+bandage                         = 1, 1.5
+medkit                          = 1, 1.5
+medkit_army                     = 1, 1.5
+medkit_scientic                 = 1, 1.5
+
+detector_advanced               = 1, 1.5
+detector_elite                  = 1, 1.5
+detector_simple                 = 1, 1.5
