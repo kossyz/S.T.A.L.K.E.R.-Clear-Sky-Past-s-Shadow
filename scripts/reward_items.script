@@ -1,0 +1,50 @@
+local act = actor
+
+
+-- категории предметов
+local categories = {
+	af_ = true,
+	outfit = true,			-- не всегда в начале секции
+	wpn = true,
+	addon = true,			-- обработать до оружия и гранат
+	knife = true,			-- обработать до оружия
+	ammo = true,
+	grenade = true,
+	detector = true,
+	flesh = true,
+	meds = "medkit, medkit_army, medkit_scientic, bandage, antirad",
+	food = "bread, conserva, kolbasa, vodka, energy_drink",
+		}
+
+
+-- иконка категории предмета
+function icon_cat(sect)
+	local img = "ui_iconsTotal_found_thing"						-- дефолтная иконка
+
+	local item
+	if sect:find("addon") then
+		item = "addon"
+	elseif sect:find("knife") then
+		item = "knife"
+	else
+		for cat, v in pairs(categories) do
+			if sect:find(cat) then								-- слово в секции
+				item = cat
+				break
+			else
+				if type(v) == "string" then						-- варианты предметов
+					if v:find(sect) then
+						item = cat
+						break
+					end
+				end
+			end
+		end
+	end
+
+	if item then
+		img = "ui_iconsTotal_got_" .. item:gsub("_", "")		-- искать "af_", подставлять "af"
+	end
+
+	return img
+end

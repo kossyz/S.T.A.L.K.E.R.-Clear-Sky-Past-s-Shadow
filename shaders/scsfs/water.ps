@@ -1,0 +1,219 @@
+#include "common.h"
+
+#include "reflections.h"
+
+#include "ogse_reflections.h"
+#include "lmodel.h"
+#include "hmodel.h"
+
+
+struct   vf
+{
+	float2	tbase	: TEXCOORD0;	// base
+	float4	tnorm0	: TEXCOORD1;	// nm0
+	float4	position_w	: TEXCOORD2;	// nm1
+	float3	M1		: TEXCOORD3;
+	float3	M2		: TEXCOORD4;
+	float3	M3		: TEXCOORD5;
+	float3	v2point_w	: TEXCOORD6;
+#ifdef	USE_SOFT_WATER
+#ifdef	NEED_SOFT_WATER
+	float4	tctexgen: TEXCOORD7;	
+#endif
+#endif
+	float4	position	: TEXCOORD8;
+	float4	c0		: COLOR0;
+	float	fog		: FOG;
+	float4	hpos	: SV_Position;
+};
+
+Texture2D s_nmap;
+Texture2D s_leaves;
+
+//////////////////////////////////////////////////////////////////////////////////
+//uniform float4	env_color;        // color.w  = lerp factor
+uniform float4	sky_color;        // color.w  = lerp factor
+uniform float4	hemi_color;        // color.w  = lerp factor
+//uniform float3x4	m_v2w;
+
+
+////////////////////////////////////////////////////////////////////////////////////
+
+
+#if defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
+float3 water_intensity;
+#endif
+
+#ifdef GBUFFER_OPTIMIZATION
+float4 main( vf I, float4 pos2d : SV_Position ) : SV_Target
+#else
+float4 main( vf I ) : SV_Target
+#endif
+{
+float3       hdiffuse,hspecular;
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+float noise  = frac(sin(dot(I.tbase, float2(12.0, 78.0) + (timers.x*1.17f) )) * 43758.0); 
+
+
+	//float4	fixed_color	= float4(1.0,1.1,1.11,1.5);
+	//float4	fixed_color	= float4(0.001,0.001,0.09,0.005);
+	float4	fixed_color	= float4(0.1,0.01,0.05,0.09); //a,r,g,b
+
+	//////////////////////////////////////////////////////////////////////////////////////////////////			
+
+	float4 base = s_base.Sample(smp_base, I.tbase);
+
+	if (rain_params.x >= 0.05f)
+		base += ripples(I.tbase,15.f)*rain_params.x;
+
+	float3	n0	= s_nmap.Sample(smp_base, I.tnorm0.xy);
+	float3	n1	= s_nmap.Sample(smp_base, I.tnorm0.zw);
+	float3	Navg	= n0 + n1 - 1;
+
+	float3	Nw	= mul (float3x3(I.M1, I.M2, I.M3), Navg);
+			Nw	= normalize (Nw);
+	float3	v2point	= normalize (I.v2point_w);
+	float3 vreflect = reflect(normalize(v2point), normalize(Nw.xyz));
+	//float3 vreflect = reflect(v2point, Nw);
+	//vreflect.y = vreflect.y*2-1;
+	vreflect.y = vreflect.y*4;
+
+	float	fresnel	= saturate (dot(vreflect,v2point));
+	float	power	= pow(fresnel,9);
+	float3 env = calc_envmap(vreflect);
+	float3 c_reflection = {0.f, 0.f, 0.f};
+	
+
+
+#ifdef USE_REFLECTIONS	
+		float4 refl = compute_ssr(I.position_w.xyz, Nw.xyz);
+		refl.xyz *= 1.6;
+		c_reflection = lerp(env.xyz*2, refl.xyz*3, refl.www*0.2);
+		
+#else		
+		c_reflection = env;
+#endif	
+	
+
+
+	base.rgb *= I.c0.xyz;
+
+	
+	
+#ifdef USE_REFLECTIONS	
+	//float3 final = lerp(c_reflection,base.rgb*0.07,base.a*2.1);
+	float3 final = lerp(c_reflection,base.rgb*0.007,base.a);
+	//final += specular_phong(v2point, Nw.xyz, L_sun_dir_w)*2.f;
+	final += specular_phong(v2point, Nw.xyz, L_sun_dir_w)*10.f;
+#else
+	float4 refl_ogse = calc_reflections(float4(I.v2point_w + eye_position, 1.0), vreflect, 1);
+	refl_ogse.xyz *= SW_REFL_INTENSITY;
+	float	amount	= 0.15h+0.25h*power;	// 1=full env, 0=no env
+	////env       *= amount;
+	float3	c_reflection_ogse = lerp(refl_ogse.xyz, env.xyz*40, refl_ogse.www*0.1);
+	float3	final              = lerp(c_reflection_ogse,base.rgb*0.05,base.a*0.5);
+#endif
+	final *= I.c0;
+
+	
+	
+	
+
+
+	//		final2	*= I.c0*2;
+	
+	
+	
+	
+	
+	
+	
+	
+
+#ifdef	NEED_SOFT_WATER
+
+	//float	alpha	= 0.55h+0.25h*power; // 1=full env, 0=no env
+	float	alpha	= 0.65h+0.35h*power; // 1=full env, 0=no env
+#ifdef	USE_SOFT_WATER
+	float2 PosTc = I.tctexgen.xy/I.tctexgen.z;
+
+#ifdef GBUFFER_OPTIMIZATION
+	gbuffer_data gbd = gbuffer_load_data( PosTc, pos2d );
+#else
+	gbuffer_data gbd = gbuffer_load_data( PosTc );
+#endif
+	float4 _P = 	float4( gbd.P, gbd.mtl );
+
+	//	Igor: additional depth test
+	float waterDepth = _P.z-I.tctexgen.z;
+
+	
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	//	water fog
+	float  fog_exp_intens = -4.0h;
+	float fog	= 1-exp(fog_exp_intens*waterDepth);
+	float3 Fc  	= float3( 0.01h, 0.01h, 0.01h) * water_intensity.r;
+	final 		= lerp (Fc, final, alpha);
+	//final 		= lerp (Fc, final, noise*0.1+alpha);
+
+	alpha 		= min(alpha, saturate(waterDepth));
+
+	alpha 		= max (fog, alpha);
+
+	//	Leaves
+	float4	leaves	= s_leaves.Sample( smp_base, I.tbase);
+			leaves.rgb *= water_intensity.r;
+	float	calc_cos = -dot(float3(I.M1.z, I.M2.z, I.M3.z),  normalize(v2point));
+	float	calc_depth = saturate(waterDepth*calc_cos);
+	float	fLeavesFactor = smoothstep(0.025, 0.05, calc_depth );
+			fLeavesFactor *= smoothstep(0.1, 0.075, calc_depth );
+	final		= lerp(final, leaves*4, leaves.a*fLeavesFactor);
+	alpha		= lerp(alpha, leaves.a, leaves.a*fLeavesFactor);
+	
+	
+	
+	
+	
+
+	
+	
+	
+
+#endif	//	USE_SOFT_WATER
+
+	//	Fogging
+	final 		= lerp(fog_color, final, I.fog);
+	alpha		*= I.fog*I.fog;
+
+	return  float4   (final, alpha );
+	//return  float4   (final, noise*0.1+alpha );
+	
+	
+		// ----- hemi model
+		
+	float4 P = I.position;	
+	float3 N = mul(m_V, Nw);
+	float 	ms	= xmaterial		;
+	//float3       hdiffuse,hspecular;
+    hmodel		(hdiffuse, hspecular, ms, P.w, WATER_GLOSS, P.xyz, N.xyz);
+	
+	
+
+#else	//	NEED_SOFT_WATER
+	final 		= lerp(fog_color, final, I.fog);
+	//return  float4   (final, I.fog*I.fog );
+#endif	//	NEED_SOFT_WATER
+}

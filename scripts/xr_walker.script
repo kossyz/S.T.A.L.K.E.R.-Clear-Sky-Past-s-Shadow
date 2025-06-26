@@ -1,0 +1,123 @@
+--------------------------------------------------------------------------------
+-- Evaluators
+--------------------------------------------------------------------------------
+
+class "evaluator_need_walker" (property_evaluator)
+
+function evaluator_need_walker:__init(st) super()
+	self.st = st
+	self.npc_st = db.storage[st.npc:id()]
+end
+
+function evaluator_need_walker:evaluate()
+	return self.st.section == self.npc_st.active_section
+end
+
+--------------------------------------------------------------------------------
+-- Actions
+--------------------------------------------------------------------------------
+
+class "action_walker" (action_base)
+
+function action_walker:__init(st) super()
+	self.st = st
+	self.move_mgr = db.storage[st.npc:id()].move_mgr
+end
+
+function action_walker:initialize()
+	action_base.initialize(self)
+	self.object:set_desired_position()
+	self.object:set_desired_direction()
+	self:reset_scheme()
+end
+
+function action_walker:activate_scheme()
+	self.st.signals = {}
+	self:reset_scheme()
+end
+
+function action_walker:reset_scheme()
+	local st = self.st
+	self.move_mgr:reset(st.path_walk, st.path_walk_info, st.path_look, st.path_look_info, st.team, st.suggested_state)
+end
+
+function action_walker:execute()
+	action_base.execute(self)
+	self.move_mgr:update()
+	local sound_idle = self.st.sound_idle
+	if sound_idle ~= nil then
+		xr_sound.set_sound_play(self.object:id(), sound_idle)
+	end
+end
+
+function action_walker:finalize()
+	self.move_mgr:finalize()
+	action_base.finalize(self)
+end
+
+function action_walker:position_riched()
+	return self.move_mgr:arrived_to_first_waypoint()
+end
+
+--------------------------------------------------------------------------------
+-- Binder
+--------------------------------------------------------------------------------
+
+local op_alife                  = xr_actions_id.alife
+local op_walker                 = xr_actions_id.zmey_walker_base + 1
+local prop_need_walker          = xr_evaluators_id.zmey_walker_base + 1
+
+local wp_switched_section_false = world_property(prop_need_walker, true)
+local wp_switched_section_true  = world_property(prop_need_walker, false)
+
+function add_to_binder(npc, ini, scheme, section, st)
+
+	local manager               = npc:motivation_action_manager()
+	manager:add_evaluator       (prop_need_walker, evaluator_need_walker(st))
+
+	-------------------------
+
+	local action                = action_walker(st)
+
+	xr_motivator.addPrecondAliveNoDangerNoEnemyNoAnomalyNoSmartcover(action)
+	xr_motivator.addCommonPrecondition(action)
+
+	action:add_precondition     (wp_switched_section_false)
+	action:add_effect           (wp_switched_section_true)
+	manager:add_action          (op_walker, action)
+
+	xr_logic.subscribe_action_for_events(nil, st, action)
+
+	-------------------------
+
+	action                      = manager:action(op_alife)
+	action:add_precondition     (wp_switched_section_true)
+end
+
+function set_scheme(npc, ini, scheme, section, gulag_name)
+
+	local st                 = xr_logic.assign_storage_and_bind(npc, ini, scheme, section)
+
+	st.logic                 = xr_logic.cfg_get_switch_conditions(ini, section, npc)
+
+	local get_string         = utils.cfg_get_string
+	local path_walk          = get_string(ini, section, "path_walk", npc, true, gulag_name)
+	local path_look          = get_string(ini, section, "path_look", nil, false, gulag_name)
+
+	if not level.patrol_path_exists(path_walk) then
+		abort("[xr_walker.set_scheme]: There is no patrol path '%s'.", path_walk)
+	end
+
+	st.path_walk             = path_walk
+	st.path_look             = path_look
+	st.path_walk_info        = utils.path_parse_waypoints(path_walk)
+	st.path_look_info        = utils.path_parse_waypoints(path_look)
+	st.team                  = get_string(ini, section, "team", nil, false, gulag_name)
+	st.sound_idle            = get_string(ini, section, "sound_idle", nil, false, "")
+	st.suggested_state       =
+	{
+		standing = get_string(ini, section, "def_state_standing", nil, false, ""),
+		  moving = get_string(ini, section, "def_state_moving", nil, false, "") or
+		           get_string(ini, section, "def_state_moving1", nil, false, ""),
+	}
+end

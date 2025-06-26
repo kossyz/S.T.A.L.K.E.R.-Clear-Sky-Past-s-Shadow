@@ -1,0 +1,65 @@
+local state_inside = 1
+local state_outside = 2
+
+--------------------------------------------------------------------------------
+
+class "action_no_weapon"
+
+function action_no_weapon:__init(zone, st)
+	self.zone = zone
+	self.st = st
+end
+
+function action_no_weapon:reset_scheme()
+	if self.zone:inside(db.actor:center()) then
+		self:zone_enter()
+	else
+		self.state = state_outside
+	end
+end
+
+function action_no_weapon:update()
+	local actor = db.actor
+	if xr_logic.try_switch_to_another_section(self.zone, self.st, actor) then
+		if self.state == state_inside then
+			self:zone_leave()
+		end
+	else
+		self:switch_state(actor)
+	end
+end
+
+function action_no_weapon:switch_state(actor)
+	if self.state == state_outside then
+		if self.zone:inside(actor:center()) then
+			self:zone_enter()
+		end
+	else
+		if not self.zone:inside(actor:center()) then
+			self:zone_leave()
+		end
+	end
+end
+
+function action_no_weapon:zone_enter()
+	self.state = state_inside
+	bind_stalker.hide_weapon()
+end
+
+function action_no_weapon:zone_leave()
+	self.state = state_outside
+	bind_stalker.restore_weapon()
+end
+
+--------------------------------------------------------------------------------
+-- Binder
+--------------------------------------------------------------------------------
+
+function add_to_binder(zone, _, _, _, st)
+	xr_logic.subscribe_action_for_events(nil, st, action_no_weapon(zone, st))
+end
+
+function set_scheme(zone, ini, scheme, section)
+	local st = xr_logic.assign_storage_and_bind(zone, ini, scheme, section)
+	st.logic = xr_logic.cfg_get_switch_conditions(ini, section, zone)
+end
