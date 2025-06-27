@@ -1,0 +1,362 @@
+local db_storage = db.storage
+
+class "action_robbery"
+
+function action_robbery:__init(zone, st)
+	self.object = zone
+	self.st = st
+	local zone_name = zone:name()
+	local reaction_zone = db.zone_by_name[zone_name.."_reaction"]
+	local attack_zone = db.zone_by_name[zone_name.."_attack"]
+	if reaction_zone == nil then
+		abort("[sr_robbery.__init]: There is no zone with name "..zone_name.."_reaction.")
+	end
+	if attack_zone == nil then
+		abort("[sr_robbery.__init]: There is no zone with name "..zone_name.."_attack.")
+	end
+	self.reaction_zone = reaction_zone
+	self.attack_zone = attack_zone
+end
+
+function action_robbery:reset_commander_sounds(commander_id)
+	local st = self.st
+	local theme_table = sound_theme.theme
+	theme_table[st.after_pay_snd]:reset(commander_id)
+	theme_table[st.kill_actor_snd]:reset(commander_id)
+	theme_table[st.stand_still_snd]:reset(commander_id)
+	theme_table[st.stop_snd]:reset(commander_id)
+	if xr_sound.sound_table[commander_id] ~= nil then
+		xr_sound.sound_table[commander_id]:reset(commander_id)
+		xr_sound.sound_table[commander_id] = nil -- prevents sound callback (-> end signal) firing on next NPC update
+	end
+end
+
+function action_robbery:reset_scheme()
+	self.active_snd                 = nil
+	self.actor_check_position       = nil
+	self.move_check_started         = nil
+	self.has_said_freeze            = nil
+	self.was_actor_held_up          = nil
+	self.loaded_into_attack_zone    = nil
+	self.was_actor_in_reaction_zone = nil
+	self.actor_enemy                = nil
+	self.after_move_check_idle      = nil
+	self.stand_still                = nil
+	self.gulag_info                 = nil
+	if self.commander_obj ~= nil then
+		self:reset_commander_sounds(self.commander_obj:id())
+	end
+	self.commander_obj              = nil
+	self.st.signals                 = {}
+end
+
+function action_robbery:enable_squad_reaction(zone_id)
+	db_storage[zone_id].robbery_manager = robbery_manager(self)
+	for _, squad in pairs (self.gulag_info.squads) do -- excludes attack_point squads moving away from their self.smart_id
+		game_relations.set_squad_sympathy(squad, 0)
+		for npc_id in pairs (squad.squad_npc) do
+			local npc_st = db_storage[npc_id]
+			local npc = npc_st and npc_st.object
+			if npc ~= nil then
+				npc_st.robbery_zone_id = zone_id
+				actor_reaction.enabled_actor_reaction(npc)
+			end
+		end
+	end
+end
+
+function action_robbery:disable_reaction_final(zone_id)
+	for _, squad in pairs (self.gulag_info.squads) do
+		for npc_id in pairs (squad.squad_npc) do
+			local npc_st = db_storage[npc_id]
+			local npc = npc_st and npc_st.object
+			if npc ~= nil then
+				actor_reaction.disable_actor_reaction(npc)
+				npc_st.robbery_zone_id = nil
+				if npc:is_talking() then
+					npc:stop_talk()
+				end
+			end
+		end
+		game_relations.set_squad_sympathy(squad, squad.sympathy)
+	end
+	db_storage[zone_id].robbery_manager = nil
+	self:reset_scheme()
+	self.was_actor_held_up = true
+end
+
+-- Returns true iff smart is occupied by idle non-enemies whose faction the
+-- player is not a member of and no emission is active and the smart is not the
+-- target of an attack or defend task:
+
+local function robbery_available(smart_name)
+
+	local board = sim_board.get_sim_board()
+	local smart = board:get_smart_by_name(smart_name)
+
+	if smart == nil then
+		return false
+	end
+
+	if smart.player_name == "none" then
+		return false
+	end
+--[[
+	-- This is currently unnecessary as it's handled with an explicit condition
+	-- in e.g. gar_robbery_bandit_blockpost_8_7.ltx:
+
+	if db.actor:character_community() == "actor_"..smart.player_name then
+		return false
+	end
+]]
+	if game_relations.get_gulag_relation_actor(smart_name, "enemy") then
+		return false
+	end
+
+	if xr_surge_hide.surge_activated then
+		return false
+	end
+
+	if task_manager.get_task_manager():get_tasks_by_smart(smart.id) ~= nil then
+		return false
+	end
+
+	for _, squad in pairs (board.smarts[smart.id].squads) do
+		if smart.combat_manager:get_squad_stage(squad) ~= "idle" then
+			return false
+		end
+	end
+
+	return true
+end
+
+-- Returns true iff actor (hasn't a weapon active AND is in check zone) OR actor has dialog active:
+
+local function actor_obeyed(actor, actor_check_position)
+	return (not isWeapon(actor:active_item()) and actor:position():distance_to(actor_check_position) < 1) or actor:is_talking()
+end
+
+local function find_nearest_npc_for_commander_job(actor_pos, gulag_info)
+	local min_dist = 100000000
+	local nearest_npc = nil
+	local sim = _G.sim
+	for _, squad in pairs (gulag_info.squads) do
+		for npc_id in pairs (squad.squad_npc) do
+			local se_npc = sim:object(npc_id)
+			local separation = actor_pos:distance_to_sqr(se_npc.position)
+			if separation < min_dist then
+				min_dist = separation
+				nearest_npc = se_npc
+			end
+		end
+	end
+	local npc_st = nearest_npc and db_storage[nearest_npc.id]
+	return npc_st and npc_st.object
+end
+
+function action_robbery:update(delta)
+
+	local actor = db.actor
+	local zone = self.object
+	local zone_id = zone:id()
+	local st = self.st
+	local manager = db_storage[zone_id].robbery_manager
+
+	if xr_logic.try_switch_to_another_section(zone, st, actor) or not robbery_available(st.gulag_name) then
+		if manager ~= nil then
+			self:disable_reaction_final(zone_id)
+		end
+		self.was_actor_held_up = true
+		return
+	end
+
+	-- handle the hold-up situation:
+
+	if manager ~= nil then
+
+		local commander = self.commander_obj
+		local commander_id = commander:id()
+		local commander_st = db_storage[commander_id]
+
+		if commander_st[commander_st.active_scheme] == nil or not commander:alive() then
+			self:disable_reaction_final(zone_id)
+			return
+		end
+
+		local commander_signals = commander_st[commander_st.active_scheme].signals
+
+		if self.move_check_started == nil then -- purposely doesn't test for false
+
+			if not self.has_said_freeze then
+				if self.active_snd ~= nil then
+					self.active_snd:stop(zone_id)
+				end
+				self:reset_commander_sounds(commander_id)
+				commander_signals["sound_end"] = false
+				commander_signals["theme_end"] = false
+				xr_sound.set_sound_play(commander_id, st.stop_snd) -- "freeze!"
+				self.has_said_freeze = true
+			end
+
+			if commander_signals["sound_end"] == true then
+				commander_signals["sound_end"] = false
+				self.move_check_started = true
+				self.actor_check_position = actor:position()
+				self.after_move_check_idle = 1500 + time_global()
+			end
+		end
+
+		if manager.robbery_end then
+			if self.reaction_zone:inside(actor:position()) then
+				xr_sound.set_sound_play(commander_id, st.after_pay_snd)
+				if commander_signals["theme_end"] == true then
+					commander_signals["theme_end"] = false
+					game_relations.set_gulag_relation_actor(st.gulag_name, "enemy")
+					self:disable_reaction_final(zone_id)
+					return
+				end
+			else
+				self:disable_reaction_final(zone_id)
+				return
+			end
+		else
+			if self.move_check_started and self.after_move_check_idle < time_global() then
+				if actor_obeyed(actor, self.actor_check_position) then
+					if actor:position():distance_to_sqr(commander:position()) > 2 then
+						xr_sound.set_sound_play(commander_id, st.stand_still_snd)
+						self.stand_still = true
+					end
+				else
+					self.actor_enemy = true
+					self.move_check_started = false
+				end
+			end
+			if not self.loaded_into_attack_zone and self.attack_zone:inside(actor:position()) then
+				self.actor_enemy = true
+			end
+		end
+
+		if self.actor_enemy then
+			if commander_signals["theme_end"] == true then -- can't fire from "freeze!" or "stand still" termination (shuffle: 'rnd')
+				commander_signals["theme_end"] = false
+				game_relations.set_gulag_relation_actor(st.gulag_name, "enemy")
+				self:disable_reaction_final(zone_id)
+				return
+			end
+			xr_sound.set_sound_play(commander_id, st.kill_actor_snd)
+		end
+
+		return
+	end
+
+	local actor_pos = actor:position()
+	local is_actor_in_reaction_zone = self.reaction_zone:inside(actor_pos)
+	local is_actor_in_hold_up_zone = zone:inside(actor_pos)
+	local is_actor_in_attack_zone = self.attack_zone:inside(actor_pos)
+
+	-- handle the pre-/post-hold-up situation:
+
+	if is_actor_in_reaction_zone or is_actor_in_hold_up_zone or is_actor_in_attack_zone then
+		if not self.was_actor_held_up and not xr_conditions.black_screen() then
+			if is_actor_in_hold_up_zone or is_actor_in_attack_zone then
+				if is_actor_in_attack_zone and not self.was_actor_in_reaction_zone then
+					self.loaded_into_attack_zone = true
+				end
+				local board = sim_board.get_sim_board()
+				local gulag = board.smarts_by_names[st.gulag_name]
+				self.gulag_info = board.smarts[gulag.id]
+				self.commander_obj = find_nearest_npc_for_commander_job(actor_pos, self.gulag_info)
+				if self.commander_obj == nil then
+					abort("[action_robbery:update]: Failed to select a robbery leader for smart '%s'.", st.gulag_name)
+				end
+				self:enable_squad_reaction(zone_id)
+			else -- is_actor_in_reaction_zone
+				self.was_actor_in_reaction_zone = true
+				self.active_snd = xr_sound.set_sound_play(zone_id, st.pda_snd) -- "hey buddy, let's have a chat"
+			end
+		end
+	else
+		if self.was_actor_held_up then
+			self.was_actor_in_reaction_zone = false
+			self.was_actor_held_up = false
+		else
+			if self.was_actor_in_reaction_zone then
+				self.active_snd = xr_sound.set_sound_play(zone_id, st.pda_return_snd) -- "you pussying out on me?"
+				if self.active_snd and self.active_snd.section == st.pda_return_snd then
+					self.was_actor_in_reaction_zone = false
+				end
+			end
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function add_to_binder(zone, _, _, _, st)
+	xr_logic.subscribe_action_for_events(nil, st, action_robbery(zone, st))
+end
+
+function set_scheme(zone, ini, scheme, section)
+	local get_string    = utils.cfg_get_string
+	local st            = xr_logic.assign_storage_and_bind(zone, ini, scheme, section)
+	st.logic            = xr_logic.cfg_get_switch_conditions(ini, section, zone)
+	st.gulag_name       = get_string(ini, section, "smart_name",       nil, false, "", nil)
+	st.money            = get_string(ini, section, "money",            nil, false, "", "all")
+	st.dialog           = get_string(ini, section, "dialog",           nil, false, "", "default_robbery_dialog")
+	st.pda_snd          = get_string(ini, section, "pda_sound",        nil, false, "", "gar_robbery_scene_see_actor")
+	st.pda_return_snd   = get_string(ini, section, "pda_return_sound", nil, false, "", "gar_robbery_scene_return")
+	st.after_pay_snd    = get_string(ini, section, "after_pay_snd",    nil, false, "", "gar_robbery_scene_after_pay")
+	st.stop_snd         = get_string(ini, section, "stop_snd",         nil, false, "", "gar_robbery_scene_stop")
+	st.stand_still_snd  = get_string(ini, section, "stand_still_snd",  nil, false, "", "gar_robbery_scene_stand_still")
+	st.kill_actor_snd   = get_string(ini, section, "kill_actor_snd",   nil, false, "", "gar_robbery_scene_kill_actor")
+end
+
+--------------------------------------------------------------------------------
+
+class "robbery_manager"
+
+function robbery_manager:__init(sr_robbery)
+	self.scene_manager = sr_robbery
+	self.commander_npc = sr_robbery.commander_obj
+	self.robbery_end = false
+end
+
+--------------------------------------------------------------------------------
+
+function robbery_end(first_speaker, second_speaker)
+	second_speaker:disable_talk()
+	second_speaker:restore_default_start_dialog()
+	local rm = db_storage[db_storage[second_speaker:id()].robbery_zone_id].robbery_manager
+	if rm ~= nil then
+		rm.robbery_end = true
+	end
+end
+
+function actor_dont_pay(first_speaker, second_speaker)
+	local robber_smart_id = _G.sim:object(second_speaker:id()).m_smart_terrain_id
+	game_relations.set_gulag_relation_actor(robber_smart_id, "enemy")
+end
+
+function actor_give_money(first_speaker, second_speaker)
+
+	local rm = db_storage[db_storage[second_speaker:id()].robbery_zone_id].robbery_manager
+	local st = rm and rm.scene_manager.st
+
+	if st == nil then
+		first_speaker:stop_talk()
+		second_speaker:stop_talk()
+		return
+	end
+
+	local actor = db.actor
+	local money
+
+	if st.money == "all" then
+		money = actor:money()
+	else
+		money = math.min(actor:money(), tonumber(st.money))
+	end
+
+	actor:give_money(-money)
+	news_manager.relocate_money(actor, "out", money)
+end
