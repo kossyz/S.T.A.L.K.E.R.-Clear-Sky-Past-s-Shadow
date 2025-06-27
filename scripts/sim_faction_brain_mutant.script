@@ -1,0 +1,87 @@
+class "faction_brain_mutant"
+
+function faction_brain_mutant:__init(faction)
+	self.faction = faction
+	self.use_issue_order = false
+	self.use_cover_attack = false
+	if faction.player_name == "monster" then
+		self.use_delay_attack = true
+		self.use_prepare_phase = false
+	else
+		self.use_delay_attack = false
+		self.use_prepare_phase = true
+	end
+	self.use_counter_attack = false
+end
+
+function faction_brain_mutant:calculate_current_expansion()
+
+	local faction = self.faction
+	local cur_exp = faction.current_expansion_level
+	local exp_table = faction.expansion_level
+	local exp_clear = true
+	local actor = db.actor
+
+	for i = 0, cur_exp - 1 do
+		if xr_logic.pick_section_from_condlist(actor, self, exp_table[i].precondition_cond) ~= "true" then
+			cur_exp = i
+			exp_clear = false
+			break
+		end
+	end
+
+	if exp_clear then
+		if cur_exp < #exp_table then
+			if xr_logic.pick_section_from_condlist(actor, self, exp_table[cur_exp].precondition_cond) == "true" then
+				cur_exp = cur_exp + 1
+			end
+		end
+	end
+
+	faction.current_expansion_level = cur_exp
+
+	self:calculate_expansion_targets()
+end
+
+function faction_brain_mutant:calculate_expansion_targets()
+
+	local faction = self.faction
+
+	faction.target_smart_value = {}
+
+	self:register_night_point()
+
+	faction:calculate_squad_tasks()
+end
+
+function faction_brain_mutant:register_night_point()
+
+	local faction = self.faction
+	local faction_name = faction.player_name
+
+	for k, smart in pairs (faction.board.smarts_by_names) do
+		local point_faction = smart.player_name
+		if point_faction ~= "none" then
+--			if faction.board.players[point_faction].brain.human == true then
+			if game_relations.is_factions_enemies(faction_name, point_faction) then
+				if sim_board.is_point_avail(smart, faction_name) then
+					self:register_target_point(smart)
+				end
+			end
+		end
+	end
+end
+
+function faction_brain_mutant:register_target_point(smart)
+
+	local smart_id = smart.id
+
+	self.faction.target_smart_value[smart_id] =
+	{
+		smart = smart,
+		cap = smart.squad_capacity, -- was 2 * smart.squad_capacity; unsuitable for monolith
+		num = 0,
+		smart_id = smart_id,
+		value = 0, -- every smart is equally valuable to mutants
+	}
+end

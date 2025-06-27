@@ -1,0 +1,17 @@
+<window>
+	<minimap>
+		<level_frame x="3" y="645" width="120" height="120"/>
+		<background x="0" y="642" width="126" height="126" stretch="1"> 
+			<texture>ui_hud_map</texture>
+			<dist_text x="5000" y="5000" width="0" height="0"/>
+		</background>
+		<center width="4" height="4" alignment="c" stretch="1"> 
+			<texture >ui_minimap_point</texture>
+		</center>
+		
+		<compass x="5000" y="5000" width="0" height="0" heading="1"/>
+		<static_counter x="5000" y="5000" width="0" height="0" light_anim="ui_pda_contacts" la_cyclic="0" la_texture="0" la_text="1" la_alpha="1" stretch="1">
+			<text_static x="5000" y="5000" width="0" height="0"/>
+		</static_counter>
+	</minimap>
+</window>
