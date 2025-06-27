@@ -1,0 +1,162 @@
+-- [!] переменные, в которых хранятся таблицы, должны быть глобальными, иначе поиск по файлу их пропускает
+
+
+-- общий порядок категорий и варианты лута
+all_order = { "флешка", "арты", "броня", "оружие", "обвес", "патр", "грнт", "мдкм", "еда", "нптк" }
+
+all_cat = {
+	["флешка"] = "flesh_",
+	["арты"] =	"af_",
+	["броня"] =	"outfit",			-- не всегда в начале секции
+	["оружие"] = "wpn_",
+	["обвес"] =	"addon_",			-- обработать до оружия и гранат
+	["патр"] =	"ammo_",
+	["грнт"] =	"grenade_",
+	["мдкм"] =	"medkit, medkit_army, medkit_scientic, bandage, antirad",
+	def =		"еда",
+	["нптк"] =	"vodka, energy_drink",
+		}
+
+
+-- подкатегории артефактов -- af_
+af_sub = { "арты", "арты редк", "арты уник" }
+
+af_cat = {
+	["арты"] =		"cristall_flower, medusa, cristall, fireball, blood, mincer_meat, electra_sparkler, electra_flash",
+	["арты редк"] =	"vyvert, night_star, dummy_glassbeads, soul, fuzz_kolobok, electra_moonlight, dummy_battery",
+	def =			"арты уник",
+		}
+
+
+-- подкатегории брони -- полные секции
+outfit_sub = { "куртка", "комбез", "научник", "тяж б/к", "экзо" }
+
+outfit_cat = {
+	["куртка"] =	"novice_outfit, bandit_outfit",
+	def =			"комбез",
+	["научник"] =	"ecolog_outfit, protection_outfit, scientific_outfit, dolg_scientific_outfit",
+	["тяж б/к"] =	"cs_heavy_outfit, dolg_heavy_outfit, svoboda_heavy_outfit, specops_outfit, military_outfit",
+	["экзо"] =		"exo_outfit, svoboda_exo_outfit",
+		}
+
+
+-- подкатегории оружия -- wpn_
+wpn_sub = { "пист", "ппмт", "дроб", "автм", "снайп", "рпмт", "гртмт" }
+
+wpn_cat = {
+	["пист"] =	"beretta, colt1911, colt1911_up2, desert_eagle, desert_eagle_up, fort, fort_up, hpsa, pb, pm, pm_up, sig220, usp, walther, wpn_walther_up2",
+	["ппмт"] =	"mp5",
+	["дроб"] =	"bm16, protecta, spas12, toz34, wincheaster1300",
+	def =		"автм",
+	["снайп"] =	"gauss, svd, svu, vintorez",
+	["рпмт"] =	"pkm",
+	["гртмт"] =	"rpg7, rg-6",
+		}
+
+
+-- подкатегории патронов -- ammo_
+ammo_sub = { "патр-п", "патр-д", "патр-а", "патр-с", "патр-рп", "патр-г", "ОГ-7В" }
+
+ammo_cat = {
+	["патр-п"] =	"9x18_fmj, 9x18_pmm, 9x19_fmj, 9x19_pbp, 11.43x23_fmj, 11.43x23_hydro",
+	["патр-д"] =	"12x70_buck, 12x76_zhekan, 12x76_dart",
+	["патр-а"] =	"5.45x39_fmj, 5.45x39_ap, 5.56x45_ss190, 5.56x45_ap",
+	def =			"патр-с",
+	["патр-рп"] = 	"pkm_100",
+	["патр-г"] =	"m209, vog-25, vog-25p",
+	["ОГ-7В"] =		"og-7b",
+		}
+
+
+
+-- отсортированный список категорий и подкатегорий
+function list_ctg(items)
+	local list = {}
+	local list_sub = {}
+
+
+	-- категории лута
+	for id, data in pairs(items) do
+		local sect = data.section
+
+		local item = all_cat.def											-- по умолчанию категория "еда"
+
+		if sect:find("addon") then
+			item = "обвес"
+		else
+			for name, cat in pairs(all_cat) do
+				if sect:find(cat) then										-- поиск типовых приставок
+					item = name
+
+					-- наличие подкатегорий
+					local catt = cat:gsub("_", "")							-- "type_" --> "type"
+					local subcat = _G[script_name()][catt .. "_sub"]		-- таблица подкатегорий в этом файле
+
+					if subcat then
+						local subs = _G[script_name()][catt .. "_cat"]
+						local isub = subs.def								-- по умолчанию самая большая подкатегория
+
+						for sname, str in pairs(subs) do
+							if not sect:find("outfit") then
+								sect = sect:gsub(cat, "")					-- убрать приставку в начале
+							end
+
+							if str:find(sect, 1, true) then					-- простой текст: rg-6, 5.45x39 и другие тексты с модификаторами + - * . ( [ {
+								isub = sname
+								break
+							end
+						end
+
+						-- список подкатегорий и предметов в них
+						if not list_sub[name] then
+							list_sub[name] = {}
+						end
+
+						list_sub[name][isub] = true
+					end
+
+					break
+				else
+					if cat:find(sect) then									-- медикаменты и напитки: поиск в списке вариантов
+						item = name
+						break
+					end
+				end
+			end
+		end
+
+		list[item] = true
+	end
+
+
+	-- общий список + сортировка
+	local ctg = {}
+
+	for k, name in ipairs(all_order) do										-- обход списка категорий по порядку
+		if list[name] then
+			local cat = all_cat.def
+
+			if all_cat[name] then
+				cat = all_cat[name]
+			end
+
+			-- наличие подкатегорий
+			local catt = cat:gsub("_", "")								-- "type_" --> "type"
+			local subcat = _G[script_name()][catt .. "_sub"]			-- таблица подкатегорий в этом файле
+
+			if subcat then
+				for kk, sname in ipairs(subcat) do						-- обход списка подкатегорий по порядку
+					if list_sub[name] then
+						if list_sub[name][sname] then
+							ctg[#ctg +1] = sname						-- подкатегории в общем списке
+						end
+					end
+				end
+			else
+				ctg[#ctg +1] = name										-- категории в общем списке
+			end
+		end
+	end
+
+	return table.concat(ctg, ", ")
+end
