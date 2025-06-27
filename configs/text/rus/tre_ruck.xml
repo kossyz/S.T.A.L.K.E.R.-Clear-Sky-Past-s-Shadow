@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="windows-1251" ?>
+<string_table>
+	<string id="tre_ruck">
+		<text>Рюкзак</text> 
+	</string>
+	<string id="tre_ruck_s">
+		<text>Рюкзак</text>
+	</string>
+	<string id="enc_tre_ruck">
+		<text>Походный рюкзак из прорезиненной камуфляжной ткани, не промокает и слабозаметен, поэтому идеально подходит для закладки своего тайника в каком-нибудь в укромном месте.</text>
+	</string>	
+</string_table>
