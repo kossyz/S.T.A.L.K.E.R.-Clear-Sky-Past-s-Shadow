@@ -1,0 +1,69 @@
+function get_npc_money(npc)
+
+	local npc_rank, rank_money = ranks.get_obj_rank_name(npc)
+
+	if npc_rank == "novice" then
+		rank_money = math.random(100, 450)
+	elseif npc_rank	== "experienced" then
+		rank_money = math.random(400, 670)
+	elseif npc_rank	== "veteran" then
+		rank_money = math.random(500, 1600)
+	elseif npc_rank	== "master" then
+		rank_money = math.random(1400, 5000)
+	else
+		return
+	end
+
+	local level_name, level_money = level.name()
+
+	if level_name == "marsh" then
+		level_money = 0.5
+	elseif level_name == "escape" or level_name == "garbage" then
+		level_money = 0.6
+	elseif level_name == "darkvalley" or level_name == "agroprom" or level_name == "agroprom_underground" then
+		level_money = 0.7
+	elseif level_name == "yantar" or level_name == "red_forest" or level_name == "military" then
+		level_money = 0.9
+	elseif level_name == "limansk" or level_name == "hospital" or level_name == "stancia_2" then
+		level_money = 1
+	else
+		return
+	end
+
+	local npc_community, com_money = npc:character_community()
+
+	if     npc_community ==	"bandit"	then
+		com_money = 0.8
+	elseif npc_community ==	"renegade"	then
+		com_money = 0.7
+	elseif npc_community ==	"freedom"	then
+		com_money = 1.4
+	elseif npc_community ==	"dolg"		then
+		com_money = 1.5
+	elseif npc_community ==	"stalker"	then
+		com_money = 1
+	elseif npc_community ==	"army"		then
+		com_money = 0.4
+	elseif npc_community ==	"killer"	then
+		com_money = 2
+	elseif npc_community ==	"monolith"	then
+		com_money = 0.2
+	elseif npc_community ==	"zombied"	then
+		com_money = 0.1
+	elseif npc_community ==	"csky"		then
+		com_money = 0.5
+	elseif npc_community == "ecolog"	then
+		com_money = 1.3
+	else
+		return
+	end
+
+	local money = math.ceil(rank_money * level_money * com_money)
+
+	if money > 0 then
+		local act = db.actor
+--		xr_sound.set_sound_play(act:id(), "pda_tips")
+		news_manager.relocate_money(act, "in", money)
+		act:give_money(money)
+	end
+end

@@ -1,0 +1,518 @@
+if (jit == nil) then
+	profiler.setup_hook()
+end
+
+schemes = {}
+
+----------------------------------------------------------------------
+dev_debug = false
+----------------------------------------------------------------------
+
+sim = nil -- global variable to store alife()
+
+local sim = nil
+
+function abort(fmt, ...)
+	local reason = string.format(fmt, ...)
+	local msg = "Abort(): "..reason
+	-- Xetrill's LuaJIT exposes Lua's 'debug' library (it's unavailable in vanilla).
+	error_log(debug == nil and msg or debug.traceback(msg.."\n"))
+	error(reason, 2)
+end
+
+function dbglog(fmt, ...)
+	error_log(string.format(fmt, ...))
+end
+
+function dbgmsg(fmt, ...)
+	if db.actor then
+		db.actor:give_game_news("Debug message:", string.format(fmt, ...), "ui_iconsTotal_monster_part", 0, 10000, 1)
+	end
+end
+
+function printf() end
+function print_table() end
+function store_table() end
+function callstack() end
+
+local function print_indented(fmt, indent_level, ...)
+	error_log(string.rep("  ", indent_level) .. string.format(fmt, ...))
+end
+
+function print_tbl(table, indent_level)
+
+	if indent_level == nil then
+		indent_level = 0
+	end
+
+	print_indented("{", indent_level)
+
+	for k, v in pairs (table) do
+
+		local ktype = type(k)
+		local vtype = type(v)
+		local kstring
+
+		if ktype == "string" then
+			kstring = "'"..k.."'"
+		elseif ktype == "userdata" then
+			kstring = "<userdata>"
+		elseif ktype == "number" or ktype == "boolean" then
+			kstring = tostring(k)
+		else -- table/function/thread
+			kstring = "<"..tostring(k)..">"
+		end
+
+		if vtype == "table" then
+			print_indented("[%s] =", indent_level + 1, kstring)
+			print_tbl(v, indent_level + 1)
+		elseif vtype == "userdata" then
+			print_indented("[%s] = <userdata>,", indent_level + 1, kstring)
+		elseif vtype == "function" or vtype == "thread" then
+			print_indented("[%s] = <%s>,", indent_level + 1, kstring, tostring(v))
+		else -- string/number/boolean
+			local vstring = vtype == "string" and "'"..v.."'" or tostring(v)
+			print_indented("[%s] = %s,", indent_level + 1, kstring, vstring)
+		end
+	end
+
+	print_indented(indent_level == 0 and "}" or "},", indent_level)
+end
+
+----------------------------------------------------------------------
+
+function action(obj, ...)
+	local arg = {...}
+	local act = entity_action()
+	for i = 1, #arg do
+		act:set_action(arg[i])
+	end
+	if obj ~= nil then
+		obj:command(act, false)
+	end
+	return entity_action(act)
+end
+
+function round(value)
+	local min = math.floor(value)
+	if value > 0 then
+		return value < min + 0.5 and min or min + 1 -- fails for negative multiples of 0.5
+	else
+		return value > min + 0.5 and min + 1 or min -- fails for positive multiples of 0.5
+	end
+end
+
+function distance_between(obj1, obj2)
+	return obj1:position():distance_to(obj2:position())
+end
+
+function has_alife_info(info_id)
+	return sim ~= nil and sim:has_info(0, info_id)
+end
+
+--------------------------------------------------
+-- Functions and variables added by Zmey
+--------------------------------------------------
+
+time_infinite = 100000000
+
+function random_choice(...)
+	local arg = {...}
+	local r = math.random(1, #arg)
+	return arg[r]
+end
+
+function if_then_else(cond, if_true, if_false)
+	if cond then
+		return if_true
+	end
+	return if_false
+end
+
+function parse_names(s)
+	local t = {}
+	local c = 0
+	for name in string.gfind(s, "[\\%w_.-]+") do -- char class missing '.' and '-' in vanilla
+		c = c + 1
+		t[c] = name
+	end
+	return t
+end
+
+function parse_names_to_hash(s)
+	local t = {}
+	for name in string.gfind(s, "[\\%w_.-]+") do
+		t[name] = true
+	end
+	return t
+end
+
+function parse_nums(s)
+	local t = {}
+	local c = 0
+	for num in string.gfind(s, "[%d.-]+") do
+		c = c + 1
+		t[c] = tonumber(num)
+	end
+	return t
+end
+
+function is_object_online(obj_id)
+	return level.object_by_id(obj_id) ~= nil
+end
+
+function get_clsid(npc)
+	return npc and npc:clsid()
+end
+
+function yaw(v1, v2)
+	return math.acos((v1.x * v2.x + v1.z * v2.z) / (math.sqrt(v1.x * v1.x + v1.z * v1.z) * math.sqrt(v2.x * v2.x + v2.z * v2.z)))
+end
+
+function yaw_degree(v1, v2)
+	return math.acos((v1.x * v2.x + v1.z * v2.z) / (math.sqrt(v1.x * v1.x + v1.z * v1.z) * math.sqrt(v2.x * v2.x + v2.z * v2.z))) * 57.2957
+end
+
+local function yaw_degree3d(v1, v2)
+	return math.acos((v1.x * v2.x + v1.y * v2.y + v1.z * v2.z) / (math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z) * math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z))) * 57.2957
+end
+
+function vector_cross(v1, v2)
+	return vector():set(v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x)
+end
+
+function vector_rotate_y(v, angle)
+	angle = angle * 0.017453292519943295769236907684886
+	local c = math.cos(angle)
+	local s = math.sin(angle)
+	return vector():set(v.x * c - v.z * s, v.y, v.x * s + v.z * c)
+end
+
+function stop_play_sound(npc)
+	if npc:alive() then
+		npc:set_sound_mask(-1)
+		npc:set_sound_mask(0)
+	end
+end
+
+-------------------------------------------------------------------------------------------
+
+function switch_online(id)
+	if sim and id ~= -1 then
+		sim:set_switch_online(id, true)
+		sim:set_switch_offline(id, false)
+	end
+end
+
+function switch_offline(npc)
+	if sim and npc and npc:alive() then
+		local npc_id = npc:id()
+		sim:set_switch_online(npc_id, false)
+		sim:set_switch_offline(npc_id, true)
+	end
+end
+
+-------------------------------------------------------------------------------------------
+
+local monster_classes = {}
+local stalker_classes = {}
+local weapon_classes = {}
+local artefact_classes = {}
+
+function IsMonster(object, class_id)
+	local id = class_id or get_clsid(object)
+	return monster_classes[id] == true
+end
+
+function IsStalker(object, class_id)
+	local id = class_id or get_clsid(object)
+	return stalker_classes[id] == true
+end
+
+function isWeapon(object, class_id)
+	local id = class_id or get_clsid(object)
+	return weapon_classes[id] == true
+end
+
+function isArtefact(object, class_id)
+	local id = class_id or get_clsid(object)
+	return artefact_classes[id] == true
+end
+
+-------------------------------------------------------------------------------------------
+
+function level_object_by_sid(sid)
+	if sim then
+		local se_obj = sim:story_object(sid)
+		if se_obj then
+			return level.object_by_id(se_obj.id)
+		end
+	end
+	return nil
+end
+
+function id_by_sid(sid)
+	if sim then
+		local se_obj = sim:story_object(sid)
+		if se_obj then
+			return se_obj.id
+		end
+	end
+	return nil
+end
+
+function set_inactivate_input_time(delta)
+	local actor_storage = db.storage[0] -- 0 = actor ID
+	actor_storage.disable_input_time = game.get_game_time()
+	actor_storage.disable_input_idle = delta
+	level.disable_input()
+end
+
+function npc_in_actor_frustrum(npc)
+	local actor_dir = device().cam_dir
+	local npc_dir = npc:position():sub(db.actor:position())
+	return yaw_degree3d(actor_dir, npc_dir) < 35
+end
+
+function on_actor_critical_power() end
+function on_actor_critical_max_power() end
+function on_actor_bleeding() end
+function on_actor_satiety() end
+function on_actor_radiation() end
+function on_actor_weapon_jammed() end
+function on_actor_cant_walk_weight() end
+function on_actor_psy() end
+
+function start_game_callback()
+
+	sim = alife()
+
+	_G.sim = sim
+
+	monster_classes = {
+
+	[clsid.bloodsucker_s]        = true,
+	[clsid.boar_s]               = true,
+	[clsid.dog_s]                = true,
+	[clsid.flesh_s]              = true,
+	[clsid.pseudodog_s]          = true,
+--	[clsid.burer_s]              = true,
+--	[clsid.cat_s]                = true,
+--	[clsid.chimera_s]            = true,
+	[clsid.controller_s]         = true,
+--	[clsid.fracture_s]           = true,
+	[clsid.poltergeist_s]        = true,
+	[clsid.gigant_s]             = true,
+--	[clsid.zombie_s]             = true,
+	[clsid.snork_s]              = true,
+	[clsid.tushkano_s]           = true,
+	[clsid.psy_dog_s]            = true,
+	[clsid.psy_dog_phantom_s]    = true
+
+	}
+
+	stalker_classes = {
+
+	[clsid.script_actor]         = true,
+	[clsid.script_stalker]       = true
+
+	}
+
+	weapon_classes = {
+
+	[clsid.wpn_vintorez_s]       = true,
+	[clsid.wpn_ak74_s]           = true,
+	[clsid.wpn_lr300_s]          = true,
+	[clsid.wpn_hpsa_s]           = true,
+	[clsid.wpn_pm_s]             = true,
+	[clsid.wpn_shotgun_s]        = true,
+	[clsid.wpn_bm16_s]           = true,
+	[clsid.wpn_svd_s]            = true,
+	[clsid.wpn_svu_s]            = true,
+	[clsid.wpn_rpg7_s]           = true,
+	[clsid.wpn_rg6_s]            = true, -- nv130224 added per castl
+	[clsid.wpn_val_s]            = true,
+	[clsid.wpn_walther_s]        = true,
+	[clsid.wpn_usp45_s]          = true,
+	[clsid.wpn_groza_s]          = true,
+	[clsid.wpn_knife_s]          = true,
+	[clsid.wpn_grenade_launcher] = true,
+	[clsid.wpn_grenade_f1]       = true,
+	[clsid.wpn_grenade_rpg7]     = true,
+	[clsid.wpn_grenade_rgd5]     = true,
+	[clsid.wpn_grenade_fake]     = true
+
+	}
+
+	artefact_classes = {
+
+	[clsid.art_bast_artefact]    = true,
+	[clsid.art_black_drops]      = true,
+	[clsid.art_dummy]            = true,
+	[clsid.art_electric_ball]    = true,
+	[clsid.art_faded_ball]       = true,
+	[clsid.art_galantine]        = true,
+	[clsid.art_gravi]            = true,
+	[clsid.art_gravi_black]      = true,
+	[clsid.art_mercury_ball]     = true,
+	[clsid.art_needles]          = true,
+	[clsid.art_rusty_hair]       = true,
+	[clsid.art_thorn]            = true,
+	[clsid.art_zuda]             = true,
+	[clsid.artefact]             = true,
+	[clsid.artefact_s]           = true
+
+	}
+
+	smart_names.init_smart_names_table()
+	treasure_manager.load_treasures()
+	sound_theme.load_sound()
+	dialog_manager.fill_phrase_table()
+	xr_s.init()                              --' Distemper 03.2008 --
+	death_manager.init_drop_settings() -- SRP
+	release_body_manager.init() -- SRP
+end
+
+ammo_section =
+{
+	["ammo_9x18_fmj"]       = true,
+--	["ammo_9x18_pbp"]       = true,
+	["ammo_9x18_pmm"]       = true,
+	["ammo_9x19_fmj"]       = true,
+	["ammo_9x19_pbp"]       = true,
+	["ammo_5.45x39_fmj"]    = true,
+	["ammo_5.45x39_ap"]     = true,
+	["ammo_5.56x45_ss190"]  = true,
+	["ammo_5.56x45_ap"]     = true,
+	["ammo_7.62x54_7h1"]    = true,
+	["ammo_7.62x54_ap"]     = true,
+	["ammo_7.62x54_7h14"]   = true,
+	["ammo_9x39_pab9"]      = true,
+	["ammo_gauss"]          = true,
+	["ammo_9x39_ap"]        = true,
+	["ammo_9x39_sp5"]       = true,
+	["ammo_11.43x23_fmj"]   = true,
+	["ammo_11.43x23_hydro"] = true,
+	["ammo_12x70_buck"]     = true,
+	["ammo_12x76_dart"]     = true,
+	["ammo_12x76_zhekan"]   = true,
+	["ammo_pkm_100"]        = true,
+	["ammo_og-7b"]          = true, -- SRP
+	["ammo_vog-25p"]        = true, -- SRP
+	["ammo_vog-25"]         = true, -- SRP
+	["ammo_m209"]           = true  -- SRP
+}
+
+function get_param_string(src_string, obj)
+	local script_ids = db.script_ids[obj:id()]
+	local out_string, num = string.gsub(src_string, "%$script_id%$", tostring(script_ids))
+	if num > 0 then
+		return out_string, true
+	else
+		return src_string, false
+	end
+end
+
+local save_markers = {}
+
+function set_save_marker(packet, mode, check, packet_name)
+	if check then
+		if save_markers[packet_name] == nil then
+			abort("[_G.set_save_marker]: Missing save marker for packet '%s'", packet_name)
+		end
+		if mode == "save" then
+			local bytes_saved = packet:w_tell() - save_markers[packet_name]
+			if bytes_saved >= 10240 then
+				abort("[_G.set_save_marker]: Saved too much (%d bytes) to packet '%s'", bytes_saved, packet_name)
+			end
+			packet:w_u16(bytes_saved)
+		else
+			local bytes_loaded = packet:r_tell() - save_markers[packet_name]
+			local bytes_saved = packet:r_u16()
+			if bytes_saved ~= bytes_loaded then
+				abort("[_G.set_save_marker]: Loaded only %d of %d bytes saved to packet '%s' (save is corrupt)", bytes_loaded, bytes_saved, packet_name)
+			end
+		end
+	else
+		if mode == "save" then
+			save_markers[packet_name] = packet:w_tell()
+			if packet:w_tell() > 16000 then
+				abort("[_G.set_save_marker]: Packet '%s' is too full (%d bytes), refusing to save more", packet_name, packet:w_tell())
+			end
+		else
+			save_markers[packet_name] = packet:r_tell()
+		end
+	end
+end
+
+function vec_to_str() end
+
+local group = nil
+local group_by_level =
+{
+	marsh                = 1,
+	escape               = 2,
+	garbage              = 3,
+	agroprom             = 4,
+	darkvalley           = 5,
+	agroprom_underground = 6,
+	yantar               = 7,
+	red_forest           = 8,
+	military             = 9,
+	limansk              = 10,
+	hospital             = 11,
+	stancia_2            = 12,
+}
+
+function change_team_sqaud_group(se_npc, squad) -- (se_npc, team, squad, group)
+--[[
+	The SRP's 'squad' arg differs from vanilla:
+
+	- In vanilla, the 'squad' arg is the value of a smart terrain's 'squad_id'
+	in all.spawn, or 0 if that's undefined. The SRP's 'squad' arg is instead the
+	smart's index in se_smart_terrain:on_before_register(). This begins from 1
+	for each map.
+
+	Since the game's smarts seem to always be processed in the order in which
+	they appeared in all.spawn at the start of a new game, the SRP's 'squad' arg
+	should be stable for a given smart across saves based on the same all.spawn
+	smart listing, and all smarts on a given map should have contiguous indices.
+	(Inter-map smart IDs are not contiguous.) So, two squads on different smarts
+	on the same map should never have the same 'squad' property, as long as
+	there aren't more than 255 smart terrains on the map. In vanilla, there
+	aren't that many in the entire game.
+
+	Why doesn't the SRP just pass the smart ID itself as the 'squad' arg? The
+	engine clamps {team, squad, group} to {u8, u8, u8} via unsigned modulo 256
+	if they don't fit a u8. And a smart ID doesn't always fit a u8, so passing
+	that as the 'squad' arg would sometimes cause it to wrap around, e.g.
+	11262 % 256 = 254. Now suppose the smart ID is a factor of 256. That would
+	wrap around to 0, which is supposed to be reserved for important NPCs!
+	So passing the smart ID would mean that some squad NPCs would have the same
+	'squad' property as important NPCs, which can cause disposition bugs.
+
+	OTOH, there's no guarantee that two squads on different maps won't have the
+	same 'squad' property value. This is also true in vanilla, where several
+	smart terrains on different maps share the same 'squad_id' in all.spawn.
+	This doesn't seem to cause any problems.
+
+	- The SRP's 'group' arg is calculated the same way as in vanilla. By
+	experiment, this must always be below 33, else newly spawned online squads
+	crash the game.
+
+	So, even if squads on different maps have the same 'squad' value, their
+	'group' property will differ.
+]]
+	if not group then
+		group = group_by_level[level.name()] or 0
+	end
+	local npc = db.storage[se_npc.id]
+	npc = npc and npc.object
+	if npc then
+		npc:change_team(se_npc.team, squad, group)
+	else
+--		se_npc.team = team
+		se_npc.squad = squad
+		se_npc.group = group
+	end
+end

@@ -1,0 +1,185 @@
+-- DC170520: Optimization.
+
+class "se_stalker" (cse_alife_human_stalker)
+
+--------------------
+
+function se_stalker:__init(section) super(section)
+	self.ini                = nil
+	self.death_droped       = false
+	self.squad_id           = nil
+	self.sim_forced_online  = false
+	self.treasure_processed = 0 -- SRP: 1 means true, other values (should be only 0 or 2) mean false
+end
+
+--------------------
+
+function se_stalker:can_switch_offline()
+
+	if xr_surge_hide.stalker_can_switch_offline(self) then
+		return true
+	end
+
+	if self.sim_forced_online then
+		return false
+	end
+
+	return cse_alife_human_stalker.can_switch_offline(self)
+end
+
+function se_stalker:can_switch_online()
+
+	if xr_surge_hide.stalker_can_switch_offline(self) then
+		return false
+	end
+
+	if self.sim_forced_online then
+		return true
+	end
+
+	if self.ini == nil or self.spawner == nil then
+		return cse_alife_human_stalker.can_switch_online(self)
+	end
+
+	if db.actor ~= nil and db.actor:alive() == false then
+		return self.online
+	end
+
+	if self.online == false then
+		return xr_logic.pick_section_from_condlist(db.actor, self, self.spawner) ~= nil and cse_alife_human_stalker.can_switch_online(self)
+	else
+		return xr_logic.pick_section_from_condlist(db.actor, self, self.spawner) ~= nil or not pda.dialog_closed
+	end
+end
+
+--------------------
+
+function se_stalker:switch_online()
+	cse_alife_human_stalker.switch_online(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil then
+			squad:switch_online(true, self.id)
+		end
+	end
+end
+
+function se_stalker:switch_offline()
+	cse_alife_human_stalker.switch_offline(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil then
+			squad:switch_online(false, self.id)
+		end
+	end
+end
+
+--------------------
+
+function se_stalker:STATE_Write(packet)
+	cse_alife_human_stalker.STATE_Write(self, packet)
+	packet:w_u8(self.treasure_processed) -- SRP
+	packet:w_bool(self.death_droped)
+	packet:w_stringZ(self.squad_id or "nil")
+	packet:w_bool(self.sim_forced_online)
+end
+
+function se_stalker:STATE_Read(packet, size)
+	cse_alife_human_stalker.STATE_Read(self, packet, size)
+	self.treasure_processed = packet:r_u8() -- SRP
+	self.death_droped = packet:r_bool()
+	self.squad_id = packet:r_stringZ()
+	if self.squad_id == "nil" then
+		self.squad_id = nil
+	end
+	self.sim_forced_online = packet:r_bool()
+end
+
+--------------------
+
+function se_stalker:on_before_register()
+	local ini = self:spawn_ini()
+	self.ini = ini
+	if ini:section_exist("spawner") then
+		self.spawner = xr_logic.parse_condlist(nil, nil, nil, ini:r_string("spawner", "cond"))
+	end
+end
+
+function se_stalker:on_register()
+
+	cse_alife_human_stalker.on_register(self)
+
+	self.board = sim_board.get_sim_board()
+	self.tm = task_manager.get_task_manager()
+
+	self:brain():can_choose_alife_tasks(false)
+
+	local ini = self.ini
+
+	if ini:section_exist("task_manager") then
+
+		local reward = utils.cfg_get_string(ini, "task_manager", "reward", nil, false, "", nil)
+		if reward ~= nil then
+			self.tm:register_rewarder(self.id, reward)
+		end
+
+		local task = utils.cfg_get_string(ini, "task_manager", "task", nil, false, "", nil)
+		if task ~= nil then
+			self.tm:register_tasker(self.id, task)
+		end
+	end
+end
+
+function se_stalker:on_unregister()
+	local strn_id = self:smart_terrain_id()
+	if strn_id ~= 65535 then
+		local smart = _G.sim:object(strn_id)
+		if smart ~= nil then
+			smart:unregister_npc(self)
+		end
+	end
+	cse_alife_human_stalker.on_unregister(self)
+end
+
+--------------------
+
+function se_stalker:on_spawn()
+	cse_alife_human_stalker.on_spawn(self)
+end
+
+function se_stalker:on_death(killer)
+	cse_alife_human_stalker.on_death(self, killer)
+	smart_terrain.on_death(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad == nil then
+			abort("[se_stalker:on_death]: There is no squad with ID '%s'.", self.squad_id)
+		end
+		squad:on_npc_death(self, killer.id)
+	end
+end
+
+--------------------
+
+local cse_alife_human_stalker_update = cse_alife_human_stalker.update
+
+function se_stalker:update()
+	cse_alife_human_stalker_update(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil and squad.commander_id == self.id then
+			squad:update()
+		end
+	end
+end
+
+--------------------
+
+class "se_trader" (cse_alife_trader)
+
+function se_trader:__init(section) super(section)
+end
+
+function se_trader:keep_saved_data_anyway()
+	return true
+end

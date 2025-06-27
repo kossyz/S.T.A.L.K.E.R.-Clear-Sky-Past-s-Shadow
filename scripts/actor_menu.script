@@ -1,0 +1,71 @@
+-- DC170611: Fixed the parting audio of an NPC playing prematurely upon entering the trade or upgrade screen with them.
+
+-- int mode:
+-- 0  = Undefined
+-- 1  = Inventory
+-- 2  = Trade
+-- 3  = Upgrade
+-- 4  = DeadBodySearch
+-- 10 = Talk dialog show
+-- 11 = Talk dialog hide
+
+local last_mode = 0
+
+function actor_menu_mode(mode)
+	if (mode == 0) then
+		if (last_mode == 1) then
+			inventory_wnd_closed()
+		elseif (last_mode == 2) then
+			trade_wnd_closed()
+		elseif (last_mode == 3) then
+			upgrade_wnd_closed()
+		elseif (last_mode == 4) then
+			dead_body_search_wnd_closed()
+		end
+		last_mode = 0
+	elseif (mode == 1) then
+		last_mode = 1
+		inventory_wnd_opened()
+	elseif (mode == 2) then
+		last_mode = 2
+		trade_wnd_opened()
+	elseif (mode == 3) then
+		last_mode = 3
+		upgrade_wnd_opened()
+	elseif (mode == 4) then
+		last_mode = 4
+		dead_body_search_wnd_opened()
+	elseif (mode == 10) then
+		dialog_wnd_showed()
+	elseif (mode == 11) then
+		dialog_wnd_closed()
+	end
+end
+
+function inventory_wnd_opened() end -- used
+function inventory_wnd_closed() end -- used
+
+function trade_wnd_opened() -- used
+	pda.dialog_closed = false -- hack to undo pda.dialog_wnd_closed() having set pda.dialog_closed = true
+	pda.trade_closed = false
+end
+
+function trade_wnd_closed() -- used
+	pda.trade_closed = true
+	pda.dialog_closed = true
+end
+
+function upgrade_wnd_opened() -- used
+	pda.dialog_closed = false -- hack to undo pda.dialog_wnd_closed() having set pda.dialog_closed = true
+	pda.upgrade_closed = false
+end
+
+function upgrade_wnd_closed() -- used
+	pda.upgrade_closed = true
+	pda.dialog_closed = true
+end
+
+function dead_body_search_wnd_opened() end -- used
+function dead_body_search_wnd_closed() end -- used
+function dialog_wnd_showed() end -- not used; pda.dialog_wnd_showed() is
+function dialog_wnd_closed() end -- not used; pda.dialog_wnd_closed() is

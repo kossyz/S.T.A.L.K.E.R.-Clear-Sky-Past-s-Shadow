@@ -1,0 +1,145 @@
+---- Call help v1
+---- Rulix aka Bak --- 12.10.2008
+
+local call_help_distance = 220
+local base_smarts = {4856,4869} --id смартов баз группировок
+local spawn_item
+local radio_id
+local need_jobs_num
+
+function check_item_drop(obj)
+	use_hand_radio(obj)
+end
+
+function actor_update(delta)
+	if radio_id and alife():object(radio_id) == nil then
+		call_help()
+		radio_id = nil
+		spawn_item = "radio_h"
+	end
+	if spawn_item then
+		alife():create(spawn_item,db.actor:position(),db.actor:level_vertex_id(),db.actor:game_vertex_id(),db.actor:id())
+		spawn_item = nil
+	end
+end
+
+function use_hand_radio(obj)
+	local section = obj:section()
+	if section=="radio_h" then
+		radio_id = obj:id()
+	end
+end
+
+function call_help()
+	local squad
+	local icon = db.actor:character_icon()
+	local npc_dist = {}
+	local sim_board = sim_board.get_sim_board()
+	local near_count = 0
+	-- выборка доступных сквадов
+	for k,v in pairs(sim_board.squads) do
+		squad = v
+		if squad == nil then
+			abort("There is no squad with id [%s] to call help", tostring(squad_id))
+			return
+		end
+		local comid = squad.commander_id
+		local com = alife():object(comid)
+		local lvlname
+		local npc = level.object_by_id(comid)
+		if npc and not IsMonster(npc) then
+			local gid = npc:game_vertex_id()
+			local lid = game_graph():vertex(gid):level_id()
+			lvlname = alife():level_name(lid)
+		end
+		local oldsmart = alife():object(squad.smart_id)
+		local dist = db.actor:position():distance_to(com.position)
+		if lvlname and lvlname == level.name() and dist < call_help_distance and npc:relation(db.actor)==game_object.friend and not oldsmart.combat_manager:point_under_attack() then
+			table.insert(npc_dist, {id = squad.squad_id, dist = dist})
+			if dist < 70 then
+				near_count = near_count + 1
+			end
+		end
+	end
+	-- сортировка по рассто€нию
+	table.sort(npc_dist, function(a,b) return a.dist < b.dist end)
+	local smart
+	local smarts_dist = {}
+	for kk,vv in pairs(sim_board.smarts) do
+		smart = sim_board.smarts[kk].smrt
+		table.insert(smarts_dist, {id = kk, dist = db.actor:position():distance_to(smart.position)})
+	end
+	table.sort(smarts_dist, function(a,b) return a.dist < b.dist end)
+	local smart_id = smarts_dist[1].id
+	smart = sim_board.smarts[smart_id].smrt
+	if smarts_dist[1].dist > 55 then
+		return
+	end	
+	-- обработка по очереди	
+	local called_num = 0
+	need_jobs_num = 0
+	for k,v in pairs(npc_dist) do
+		if called_num > 2 then
+			break
+		end
+		local sqid = v.id
+		squad = sim_board.squads[sqid]
+		local comid = squad.commander_id
+		local oldsmart = alife():object(squad.smart_id)
+		local inbase = 0
+		for kk,vv in pairs(base_smarts) do
+			if squad.smart_id == vv then
+				inbase = 1
+			end
+		end
+		local staycnt = 0
+		for kk,vv in pairs(sim_board.smarts[squad.smart_id].squads) do
+			if vv.squad_online == true and not game_relations.is_squad_enemy_to_actor(vv.squad_id) then
+				staycnt = staycnt + 1
+			end
+		end
+		if smart_id == squad.smart_id then
+			prnt(comid,squad.smart_id,"ћы уже здесь!")
+		elseif inbase == 1 then
+			prnt(comid,squad.smart_id,"»звини, нам нельз€ оставл€ть базу.")
+		elseif squad.current_action.name == "stay_point" and staycnt < 2 then
+			prnt(comid,squad.smart_id,"»звини, друг, нам нужно держать точку.")
+		elseif near_count > 2 then
+			prnt(comid,squad.smart_id,"” теб€ там и так народу хватает!")
+		elseif smart_have_jobs_for_squad(smart,squad) then
+--		else
+			prnt(comid,sqid,"ƒержись, друг!")
+			if squad.current_action then
+				squad.current_action:finalize()
+				squad.current_action = nil
+			end
+--			sim_board:exit_smart(squad, oldsmart)
+--			sim_board:assign_squad_to_smart(squad, smart_id)
+			squad.current_action = sim_squad_generic.sim_attack_point(squad, smart_id, true)
+			squad.current_action.target_power_value = 5
+			squad.current_action:make()
+			called_num = called_num + 1
+--			break
+		end
+--		sim_board:enter_smart(squad, smart)
+	end
+end
+
+function smart_have_jobs_for_squad(smart,squad) -- не получилось вз€ть кол-во работ(
+--	need_jobs_num = squad.npc_count -- need_jobs_num + 
+--	for k,v in pairs(smart.stalker_jobs) do
+--		prnt(db.actor:id(),k,v)
+--	end
+--	local jobs = smart.jobs.jobs[2]
+--	local jnum = table.getn(jobs)
+--	prnt(db.actor:id(),jobs,jnum)
+--	local smart_jobs = table.getn(jobs.jobs)
+--	prnt(db.actor:id(),smart_jobs,need_jobs_num)
+	return true --smart_jobs >= need_jobs_num
+end
+
+function prnt(id,p1,p2)
+	talker = level.object_by_id(id)
+	icon = talker:character_icon()
+	db.actor:give_game_news(tostring(p1), tostring(p2), icon, 2, 6000, 1)
+end

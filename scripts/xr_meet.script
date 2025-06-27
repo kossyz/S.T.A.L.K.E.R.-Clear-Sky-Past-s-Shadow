@@ -1,0 +1,530 @@
+--------------------------------------------------------------------------------
+-- Evaluators
+--------------------------------------------------------------------------------
+
+class "evaluator_contact" (property_evaluator)
+
+function evaluator_contact:__init(st) super()
+	self.st = st
+	self.wound_manager = db.storage[st.npc:id()].wounded.wound_manager
+end
+
+function evaluator_contact:evaluate()
+
+	if self.st.meet_only_at_path then
+		if self.move_mgr == nil then
+			self.move_mgr = db.storage[self.object:id()].move_mgr
+		end
+		if not self.move_mgr:arrived_to_first_waypoint() then
+			return false
+		end
+	end
+
+	if not db.actor then
+		return false
+	end
+
+	if not db.actor:alive() then
+		return false
+	end
+
+	if self.wound_manager.state ~= "nil" then
+		return false
+	end
+
+	if self.enemy_evaluator == nil then
+		local mgr = self.object:motivation_action_manager()
+		self.enemy_evaluator = mgr:evaluator(stalker_ids.property_enemy)
+	end
+
+	if self.enemy_evaluator:evaluate() then
+		self.object:disable_talk()
+		return false
+	end
+
+	self.st.meet_manager:update()
+
+	return self.st.meet_manager.state ~= "nil"
+end
+
+--------------------------------------------------------------------------------
+-- Actions
+--------------------------------------------------------------------------------
+
+class "action_meet_wait" (action_base)
+
+function action_meet_wait:__init(st) super()
+	self.st = st
+end
+
+function action_meet_wait:initialize()
+	action_base.initialize(self)
+	self.object:set_desired_position()
+	self.object:set_desired_direction()
+	self.target = {}
+	self.start_wait_time = nil
+	self.last_sound_played = false
+	self.was_dialog = false
+end
+
+local emerg = {animation = true}
+
+function action_meet_wait:execute()
+
+	action_base.execute(self)
+
+	local meet_manager = self.st.meet_manager
+	local victim = nil
+
+	if meet_manager.victim == "actor" then
+		victim = db.actor
+	elseif meet_manager.victim ~= "nil" then
+		victim = _G.sim:story_object(meet_manager.victim)
+	end
+
+	if meet_manager.state ~= "quest_npc" then
+		self.target.look_object = victim
+		if meet_manager.emerg_state then
+			state_mgr.set_state(self.object, meet_manager.state, nil, nil, self.target, emerg)
+		else
+			state_mgr.set_state(self.object, meet_manager.state, nil, nil, self.target, nil)
+		end
+		self.target.look_object = nil
+	end
+
+	if self.was_dialog then
+		return
+	end
+
+	if self.object:is_talking() then
+		self.was_dialog = true
+	end
+
+	if meet_manager.sound == "nil" then
+		self.start_wait_time = nil
+		self.last_sound_played = false
+		return
+	end
+
+	if self.start_wait_time == nil then
+		local need_wpn = isWeapon(db.actor:active_item()) and self.object:relation(db.actor) ~= game_object.friend
+		local start_sound = need_wpn and self.st.sound_start_wpn or self.st.sound_start
+		if start_sound ~= "nil" then
+			xr_sound.set_sound_play(self.object:id(), start_sound)
+		end
+		self.start_wait_time = time_global()
+	else
+		local idle_time = time_global() - self.start_wait_time
+		if idle_time > 20000 then
+			if not self.last_sound_played then
+				if self.st.sound_stop ~= "nil" then
+					xr_sound.set_sound_play(self.object:id(), self.st.sound_stop)
+				end
+				self.last_sound_played = true
+			end
+		elseif idle_time >= 5000 then
+			xr_sound.set_sound_play(self.object:id(), meet_manager.sound)
+		end
+	end
+end
+
+function action_meet_wait:finalize()
+	action_base.finalize(self)
+end
+
+--------------------------------------------------------------------------------
+
+class "Cmeet_manager"
+
+function Cmeet_manager:__init(npc, st)
+	self.npc = npc
+	self.st = st
+	self.emerg_state = false
+	self.was_dialog = false
+	self.was_hello_played = false
+	self.dist = nil
+	self.startdialog = nil
+	self.state = "nil"
+	self.sound = "nil"
+	self.victim = "nil"
+end
+
+local function get_data_for_distance(dist_table, dist) -- expects table in descending order of dist limits
+	local data
+	for i = 1, #dist_table do
+		local dist_data = dist_table[i]
+		if dist > dist_data.limit then
+			return data
+		end
+		data = dist_data
+	end
+	return data
+--[[
+	-- Equivalent alternative implementation:
+
+	for i = #dist_table, 1, -1 do
+		local dist_data = dist_table[i]
+		if dist <= dist_data.limit then
+			return dist_data
+		end
+	end
+	return nil
+]]
+end
+
+function Cmeet_manager:update()
+
+	local meet_dialog = xr_logic.pick_section_from_condlist(db.actor, self.npc, self.st.meet_dialog)
+
+	if self.startdialog ~= meet_dialog then
+		self.startdialog = meet_dialog
+		if meet_dialog == nil or meet_dialog == "nil" then
+			self.npc:restore_default_start_dialog()
+		else
+			self.npc:set_start_dialog(meet_dialog)
+			if self.npc:is_talking() then
+				db.actor:run_talk_dialog(self.npc, self.st.allow_break)
+			end
+		end
+	end
+
+	self:process_use()
+
+	if self.npc:is_talking() then
+		self.dist = 0
+	else
+		if self.st.precond == "usability"
+		or self.st.precond == "visibility" and (not self.npc:see(db.actor) or not npc_in_actor_frustrum(self.npc))
+		or db.actor:is_talking() then
+			self.state = "nil"
+			self.sound = "nil"
+			if self.st.quest_npc then
+				self.was_dialog = false
+				self.was_hello_played = false
+			end
+			return
+		end
+		self.dist = self.npc:position():distance_to(db.actor:position())
+	end
+
+	self.victim = self:process_victim()
+	self.state, self.sound = self:process_meet()
+
+	if self.st.quest_npc and get_data_for_distance(self.st.meet_state, self.dist) then
+		if self.was_dialog then
+			local npc_id = self.npc:id()
+			if self.st.sound_stop ~= "nil" and self.st.sound_stop ~= "meet_general_stop" and pda.dialog_closed and xr_sound.sound_table[npc_id] == nil then
+				xr_sound.set_sound_play(npc_id, self.st.sound_stop)
+				self.was_dialog = false
+			end
+		else
+			if self.npc:is_talking() then
+				self.was_dialog = true
+			end
+			if not self.was_hello_played then
+				local npc_id = self.npc:id()
+				if not self.npc:is_talking() and self.st.sound_start ~= "nil" and self.st.sound_start ~= "meet_general_start" and xr_sound.sound_table[npc_id] == nil then
+					xr_sound.set_sound_play(npc_id, self.st.sound_start)
+				end
+				self.was_hello_played = true
+			end
+		end
+	end
+end
+
+function Cmeet_manager:process_meet()
+
+	local need_wpn = isWeapon(db.actor:active_item()) and self.npc:relation(db.actor) ~= game_object.friend
+	local meet_state_table
+
+	if need_wpn then
+		meet_state_table = self.st.meet_state_wpn
+	else
+		meet_state_table = self.st.meet_state
+	end
+
+	local meet_state_data = get_data_for_distance(meet_state_table, self.dist)
+
+	if meet_state_data ~= nil then
+		self.emerg_state = need_wpn
+		local r1 = xr_logic.pick_section_from_condlist(db.actor, self.npc, meet_state_data.state)
+		local r2 = nil
+		if meet_state_data.sound and not self.npc:is_talking() then
+			r2 = xr_logic.pick_section_from_condlist(db.actor, self.npc, meet_state_data.sound)
+		end
+		return tostring(r1), tostring(r2)
+	end
+
+	return "nil", "nil"
+end
+
+function Cmeet_manager:process_victim()
+	local victim_table = isWeapon(db.actor:active_item()) and self.st.victim_wpn or self.st.victim
+	local victim_data = get_data_for_distance(victim_table, self.dist)
+	if victim_data ~= nil then
+		return tostring(xr_logic.pick_section_from_condlist(db.actor, self.npc, victim_data.state))
+	end
+	return "nil"
+end
+
+function Cmeet_manager:process_use()
+
+	if xr_sleeper.is_npc_asleep(self.npc) then
+		self.npc:disable_talk()
+		if self.npc:is_talking() then
+			self.npc:stop_talk()
+		end
+		return
+	end
+
+	if db.storage[self.npc:id()].robbery_zone_id ~= nil then
+		return
+	end
+
+	local t
+
+	if isWeapon(db.actor:active_item()) and self.npc:relation(db.actor) ~= game_object.friend then
+		t = xr_logic.pick_section_from_condlist(db.actor, self.npc, self.st.use_wpn)
+	else
+		t = xr_logic.pick_section_from_condlist(db.actor, self.npc, self.st.use)
+	end
+
+	if t == "true" then
+		self.npc:enable_talk()
+	elseif t == "false" then
+		self.npc:disable_talk()
+		if self.npc:is_talking() then
+			self.npc:stop_talk()
+		end
+	elseif t == "self" then
+		if not self.npc:is_talking() then
+			self.npc:enable_talk()
+			db.actor:run_talk_dialog(self.npc, not self.st.allow_break)
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
+-- Binder
+--------------------------------------------------------------------------------
+
+local op_alife                   = xr_actions_id.alife
+local op_contact                 = xr_actions_id.stohe_meet_base + 1
+local op_state_mgr_to_idle_alife = xr_actions_id.state_mgr + 2
+local prop_contact               = xr_evaluators_id.stohe_meet_base + 1
+
+local wp_meet_true               = world_property(prop_contact, true)
+local wp_meet_false              = world_property(prop_contact, false)
+local wp_wounded_false           = world_property(xr_evaluators_id.sidor_wounded_base, false)
+local wp_abuse_false             = world_property(xr_evaluators_id.abuse_base, false)
+
+function add_to_binder(npc, ini, scheme, section, st)
+
+	local manager            = npc:motivation_action_manager()
+	manager:add_evaluator    (prop_contact, evaluator_contact(st))
+
+	-------------------------
+
+	local action             = action_meet_wait(st)
+
+	xr_motivator.addPrecondAliveNoDangerNoEnemyNoAnomalyNoSmartcover(action)
+
+	action:add_precondition  (wp_meet_true)
+	action:add_precondition  (wp_wounded_false)
+	action:add_precondition  (wp_abuse_false)
+
+	action:add_effect        (wp_meet_false)
+	manager:add_action       (op_contact, action)
+
+	-------------------------
+
+	action                   = manager:action(op_alife)
+	action:add_precondition  (wp_meet_false)
+
+	-------------------------
+
+	action                   = manager:action(op_state_mgr_to_idle_alife)
+	action:add_precondition  (wp_meet_false)
+
+	-------------------------
+
+	st.meet_manager          = Cmeet_manager(npc, st)
+end
+
+------------
+
+function parse_data(str)
+	local t = {}
+	for limit, state, sound in string.gfind(str, "(%d+)%|([^|@]+)@?([^|]*)") do
+		local data = {limit = tonumber(limit), state = xr_logic.parse_condlist(nil, nil, nil, state)}
+		if sound ~= "" then
+			data.sound = xr_logic.parse_condlist(nil, nil, nil, sound)
+		end
+		t[#t + 1] = data
+	end
+	return t
+end
+
+local function get_meet_defaults(npc, scheme)
+
+	local def = {}
+	local npc_community = npc:character_community()
+
+	if scheme == "nil" then
+		def.meet_state       = "5|wait@meet_general_wait"
+		def.meet_state_wpn   = "5|threat@meet_weapon_wait"
+		def.victim           = "5|actor"
+		def.victim_wpn       = "5|actor"
+		def.sound_start      = "meet_general_start"
+		def.sound_start_wpn  = "meet_weapon_start"
+		def.sound_stop       = "meet_general_stop"
+		def.use              = "true"
+		def.precond          = "visibility"
+		def.abuse            = "true"
+	elseif scheme == "kamp" then
+		def.meet_state       = "2|wait"
+		def.meet_state_wpn   = ""
+		def.victim           = "2|actor"
+		def.victim_wpn       = ""
+		def.sound_start      = "nil"
+		def.sound_start_wpn  = "nil"
+		def.sound_stop       = "nil"
+		def.use              = "{=_kamp_talk}true,false"
+		def.precond          = "usability"
+		def.abuse            = "false"
+	elseif npc_community == "army" or
+	       npc_community == "monolith" or
+	       npc_community == "killer" or
+	       npc_community == "bandit" or
+	       npc_community == "zombied" then
+		def.meet_state       = ""
+		def.meet_state_wpn   = ""
+		def.victim           = ""
+		def.victim_wpn       = ""
+		def.sound_start      = "nil"
+		def.sound_start_wpn  = "nil"
+		def.sound_stop       = "nil"
+		def.use              = "false"
+		def.precond          = "visibility"
+		def.abuse            = "false"
+	else
+		def.meet_state       = "2|wait@meet_general_wait"
+		def.meet_state_wpn   = "2|threat@meet_weapon_wait"
+		def.victim           = "2|actor"
+		def.victim_wpn       = "2|actor"
+		def.sound_start      = "meet_general_start"
+		def.sound_start_wpn  = "meet_weapon_start"
+		def.sound_stop       = "meet_general_stop"
+		def.use              = "true"
+		def.precond          = "visibility"
+		def.abuse            = "true"
+	end
+
+	return def
+end
+
+local function init_meet(npc, ini, ini_filename, section, st, scheme)
+
+	if section == st.cached_section then
+		if section == "no_meet" or scheme == st.cached_scheme and ini_filename == st.cached_ini_filename then
+			return
+		end
+	end
+
+	st.cached_section = section
+	st.cached_scheme = scheme
+	st.cached_ini_filename = ini_filename
+
+	if section == "nil" then
+		local def            = get_meet_defaults(npc, scheme)
+		st.meet_state        = parse_data(def.meet_state)
+		st.meet_state_wpn    = parse_data(def.meet_state_wpn)
+		st.victim            = parse_data(def.victim)
+		st.victim_wpn        = parse_data(def.victim_wpn)
+		st.sound_start       = def.sound_start
+		st.sound_start_wpn   = def.sound_start_wpn
+		st.sound_stop        = def.sound_stop
+		st.use               = xr_logic.parse_condlist(nil, nil, nil, def.use)
+		st.use_wpn           = xr_logic.parse_condlist(nil, nil, nil, "false")
+		st.meet_dialog       = xr_logic.parse_condlist(nil, nil, nil, "")
+		st.precond           = def.precond
+		st.abuse             = def.abuse
+		st.meet_only_at_path = false
+		st.trade_enable      = true
+		st.allow_break       = true
+		st.quest_npc         = false
+	elseif section == "no_meet" then
+		st.meet_state        = parse_data("")
+		st.meet_state_wpn    = parse_data("")
+		st.victim            = parse_data("")
+		st.victim_wpn        = parse_data("")
+		st.sound_start       = "nil"
+		st.sound_start_wpn   = "nil"
+		st.sound_stop        = "nil"
+		st.use               = xr_logic.parse_condlist(nil, nil, nil, "false")
+		st.use_wpn           = xr_logic.parse_condlist(nil, nil, nil, "false")
+		st.meet_dialog       = xr_logic.parse_condlist(nil, nil, nil, "")
+		st.precond           = "usability"
+		st.abuse             = "false"
+		st.meet_only_at_path = false
+		st.trade_enable      = false
+		st.allow_break       = true
+		st.quest_npc         = false
+	else
+		local def            = get_meet_defaults(npc, scheme)
+		st.meet_state        = parse_data(utils.cfg_get_string(ini, section, "meet_state",       nil, false, "", def.meet_state))
+		st.meet_state_wpn    = parse_data(utils.cfg_get_string(ini, section, "meet_state_wpn",   nil, false, "", def.meet_state_wpn))
+		st.victim            = parse_data(utils.cfg_get_string(ini, section, "victim",           nil, false, "", def.victim))
+		st.victim_wpn        = parse_data(utils.cfg_get_string(ini, section, "victim_wpn",       nil, false, "", def.victim_wpn))
+		st.sound_start       =            utils.cfg_get_string(ini, section, "sound_start",      nil, false, "", def.sound_start)
+		st.sound_start_wpn   =            utils.cfg_get_string(ini, section, "sound_start_wpn",  nil, false, "", def.sound_start_wpn)
+		st.sound_stop        =            utils.cfg_get_string(ini, section, "sound_stop",       nil, false, "", def.sound_stop)
+		st.use               = xr_logic.parse_condlist(nil, nil, nil, utils.cfg_get_string(ini, section, "use",         nil, false, "", def.use))
+		st.use_wpn           = xr_logic.parse_condlist(nil, nil, nil, utils.cfg_get_string(ini, section, "use_wpn",     nil, false, "", "false"))
+		st.meet_dialog       = xr_logic.parse_condlist(nil, nil, nil, utils.cfg_get_string(ini, section, "meet_dialog", nil, false, "", ""))
+		st.precond           = utils.cfg_get_string(ini, section, "precond",           nil, false, "", def.precond)
+		st.abuse             = utils.cfg_get_string(ini, section, "abuse",             nil, false, "", def.abuse)
+		st.meet_only_at_path = utils.cfg_get_bool  (ini, section, "meet_only_at_path", nil, false, false)
+		st.trade_enable      = utils.cfg_get_bool  (ini, section, "trade_enable",      nil, false, true)
+		st.allow_break       = utils.cfg_get_bool  (ini, section, "allow_break",       nil, false, true)
+		st.quest_npc         = utils.cfg_get_bool  (ini, section, "quest_npc",         nil, false, false)
+	end
+
+	if st.abuse == "true" then
+		xr_abuse.enable_abuse(npc)
+	else
+		xr_abuse.disable_abuse(npc)
+	end
+
+	if st.trade_enable then
+		npc:enable_trade()
+	else
+		npc:disable_trade()
+	end
+end
+
+function reset_meet(npc, scheme, npc_st, section)
+	local meet_section = section ~= "nil" and
+	                     utils.cfg_get_string(npc_st.ini, section, "meet", nil, false, "") or
+	                     utils.cfg_get_string(npc_st.ini, npc_st.section_logic, "meet", nil, false, "", "nil")
+	init_meet(npc, npc_st.ini, npc_st.ini_filename, meet_section, npc_st.meet, scheme)
+end
+
+function cannot_talk_by_weapon(npc)
+
+	if not isWeapon(db.actor:active_item()) then
+		return false
+	end
+
+	local st = db.storage[npc:id()].meet
+
+	if st.use and xr_logic.pick_section_from_condlist(db.actor, npc, st.use) == "false" then
+		return false
+	end
+
+	if st.use_wpn and xr_logic.pick_section_from_condlist(db.actor, npc, st.use_wpn) == "false" then
+		return true
+	end
+
+	return false
+end

@@ -1,0 +1,208 @@
+local state_initial        = 0
+local state_animation      = 1
+local state_sound          = 2
+
+--------------------------------------------------------------------------------
+-- Evaluators
+--------------------------------------------------------------------------------
+
+class "evaluator_need_remark" (property_evaluator)
+
+function evaluator_need_remark:__init(st) super()
+	self.st = st
+	self.npc_st = db.storage[st.npc:id()]
+end
+
+function evaluator_need_remark:evaluate()
+	return self.st.section == self.npc_st.active_section
+end
+
+--------------------------------------------------------------------------------
+-- Actions
+--------------------------------------------------------------------------------
+
+class "action_remark" (action_base)
+
+function action_remark:__init(st) super()
+	self.st = st
+end
+
+function action_remark:initialize()
+	action_base.initialize(self)
+	self.object:set_desired_position()
+	self.object:set_desired_direction()
+--'	xr_sound.set_sound(self.object, nil)
+end
+
+function action_remark:activate_scheme()
+	local st           = self.st
+	st.signals         = {}
+	self.snd_scheduled = st.snd_anim_sync == false and st.snd ~= nil
+	self.state         = state_initial
+end
+
+function action_remark:get_target()
+
+	local st = self.st
+
+	if st.target_found == false then -- purposely doesn't test for nil
+		st.target_position, st.target_id, st.target_found = initialize_gulag_target(self.object, st.target)
+		if st.target_found == false then -- nv120127 added "self." per castl
+			return nil
+		end
+	end
+
+	local look_tbl = {}
+
+	if st.target_actor then
+		look_tbl.look_object = db.actor
+	end
+
+	if st.target_id then
+		look_tbl.look_object = level.object_by_id(st.target_id)
+	end
+
+	if st.target_position then
+		look_tbl.look_position = st.target_position
+	end
+
+	return look_tbl
+end
+
+function action_remark:time_callback()
+	self.state = state_sound
+	self:update()
+	self.st.signals["anim_end"] = true
+end
+
+function action_remark:update()
+
+	if self.state == state_initial then
+
+		local target = self:get_target()
+
+		if target == nil then
+			return
+		end
+
+		local cb = {obj = self, func = self.time_callback}
+		local st = self.st
+		local npc = self.object
+		local anim = xr_logic.pick_section_from_condlist(db.actor, npc, st.anim)
+		local synsound = st.snd_anim_sync and st.snd or nil
+
+		state_mgr.set_state(npc, anim, cb, 0, target, {animation = true}, synsound)
+
+		self.state = state_animation
+
+	elseif self.state == state_sound then
+
+		if self.snd_scheduled then
+			xr_sound.set_sound_play(self.object:id(), self.st.snd)
+		end
+	end
+end
+
+function action_remark:execute()
+	action_base.execute(self)
+	self:update()
+end
+
+function action_remark:finalize()
+	action_base.finalize(self)
+end
+
+--------------------------------------------------------------------------------
+-- Binder
+--------------------------------------------------------------------------------
+
+local op_alife                  = xr_actions_id.alife
+local op_remark                 = xr_actions_id.zmey_remark_base + 1
+local prop_need_remark          = xr_evaluators_id.zmey_remark_base + 1
+
+local wp_switched_section_false = world_property(prop_need_remark, true)
+local wp_switched_section_true  = world_property(prop_need_remark, false)
+
+function add_to_binder(npc, ini, scheme, section, st)
+
+	local manager               = npc:motivation_action_manager()
+	manager:add_evaluator       (prop_need_remark, evaluator_need_remark(st))
+
+	-------------------------
+
+	local action                = action_remark(st)
+
+	xr_motivator.addPrecondAliveNoDangerNoEnemyNoAnomalyNoSmartcover(action)
+	xr_motivator.addCommonPrecondition(action)
+
+	action:add_precondition     (wp_switched_section_false)
+	action:add_effect           (wp_switched_section_true)
+	manager:add_action          (op_remark, action)
+
+	xr_logic.subscribe_action_for_events(nil, st, action)
+
+	-------------------------
+
+	action                      = manager:action(op_alife)
+	action:add_precondition     (wp_switched_section_true)
+end
+
+function initialize_gulag_target(npc, target)
+
+	local gulag = nil
+	local param1, param2 = utils.parse_target(target)
+	local wp_id = tonumber(param2)
+
+	if wp_id then
+		return patrol(param1):point(wp_id), nil, true
+	end
+
+	if param2 then
+		gulag = xr_gulag.get_gulag_by_name(param2)
+	else
+		gulag = xr_gulag.get_npc_smart(npc)
+	end
+
+	if gulag ~= nil then
+		local npc_id = gulag:idNPCOnJob(param1)
+		if npc_id then
+			return nil, npc_id, true
+		end
+	end
+
+	return nil, nil, false
+end
+
+function set_scheme(npc, ini, scheme, section)
+
+	local st            = xr_logic.assign_storage_and_bind(npc, ini, scheme, section)
+	local get_string    = utils.cfg_get_string
+
+	st.logic            = xr_logic.cfg_get_switch_conditions(ini, section, npc)
+	st.snd_anim_sync    = utils.cfg_get_bool(ini, section, "snd_anim_sync", nil, false)
+	st.snd              = get_string(ini, section, "snd", nil, false, "", nil)
+	st.anim             = xr_logic.parse_condlist(nil, nil, nil, get_string(ini, section, "anim", nil, false, "", "wait"))
+	st.target           = get_string(ini, section, "target", nil, false, "", "nil")
+	st.target_id        = nil
+	st.target_position  = nil
+	st.target_found     = nil -- purposely not false!
+
+	if st.target ~= "nil" then
+		if st.target == "actor" then
+			st.target_actor = true
+			st.target_found = true
+		else
+			st.target_actor = false
+			local sid = tonumber(st.target)
+			if sid then
+				st.target_id = id_by_sid(sid)
+				if not st.target_id then
+					abort("remark <error>: Wrong story id [%s] for [%s] in section [%s].", st.target, npc:name(), section)
+				end
+				st.target_found = true
+			else
+				st.target_position, st.target_id, st.target_found = initialize_gulag_target(npc, st.target)
+			end
+		end
+	end
+end

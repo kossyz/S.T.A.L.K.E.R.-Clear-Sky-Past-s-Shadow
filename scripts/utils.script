@@ -1,0 +1,309 @@
+-- DC170529: Corrected the defaulting in cfg_get_string() - a non-nil default value was not returned if r_string() was reached and returned nil. Also, optimizations.
+
+local math_abs = math.abs
+local string_find = string.find
+local string_gfind = string.gfind
+local string_sub = string.sub
+
+--------------------------------------------------------------------------------
+
+function to_str(what)
+	return what == nil and "<nil>" or tostring(what)
+end
+
+function copy_table(dest, src)
+	for k, v in pairs (src) do
+		if type(v) == "table" then
+			dest[k] = {}
+			copy_table(dest[k], v)
+		else
+			dest[k] = v
+		end
+	end
+end
+
+function graph_distance(vid1, vid2)
+	local gg = game_graph()
+	return gg:vertex(vid1):game_point():distance_to(gg:vertex(vid2):game_point())
+end
+
+function vector_cmp(a, b)
+	return a.x == b.x and a.y == b.y and a.z == b.z
+end
+
+function vector_cmp_prec(a, b, d)
+	return math_abs(a.x - b.x) <= d and math_abs(a.y - b.y) <= d and math_abs(a.z - b.z) <= d
+end
+
+function vector_copy_by_val(vec)
+	return vector():set(vec)
+end
+
+--------------------------------------------------------------------------------
+
+function cfg_get_bool(ini, section, field, object, is_mandatory, default)
+
+	if section and ini:line_exist(section, field) then
+		return ini:r_bool(section, field) -- "1" and "true" (in any case) evaluate to true; other numbers evaluate to false, as do "nil" and "test"
+	end
+
+	if not is_mandatory then
+		if default then
+			-- Tolerate a non-boolean default value by commenting this out:
+			if default ~= true then
+				abort("[utils.cfg_get_bool]: Object '%s': Default value supplied for field '%s' in section '%s' is not boolean.", object and object:name() or "nil", tostring(field), tostring(section))
+			end
+			return default
+		end
+		return false
+	end
+
+	abort("[utils.cfg_get_bool]: Object '%s': Attempted to read a non-existent boolean field '%s' in section '%s'.", object and object:name() or "nil", tostring(field), tostring(section))
+end
+
+function cfg_get_string(ini, section, field, object, is_mandatory, gulag_name, default)
+
+	local str = section and ini:line_exist(section, field) and ini:r_string(section, field) -- false or nil or a string
+
+	if str then
+		if gulag_name == "" or not gulag_name then
+			return str
+		end
+		return gulag_name.."_"..str
+	end
+
+	if not is_mandatory then
+		return default
+	end
+
+	abort("[utils.cfg_get_string]: Object '%s': Attempted to read a non-existent string value of field '%s' in section '%s'.", object and object:name() or "nil", tostring(field), tostring(section))
+end
+
+function cfg_get_number(ini, section, field, object, is_mandatory, default)
+
+	if section and ini:line_exist(section, field) then
+		return ini:r_float(section, field) -- "nil" and "a1" evaluate to 0; "2a" and "2" evaluate to 2
+	end
+
+	if not is_mandatory then
+		return default
+	end
+
+	abort("[utils.cfg_get_number]: Object '%s': Attempted to read a non-existent number field '%s' in section '%s'.", object and object:name() or "nil", tostring(field), tostring(section))
+end
+
+--------------------------------------------------------------------------------
+
+function stalker_at_waypoint(stalker, patrol_path, path_point)
+	return stalker:position():distance_to_sqr(patrol_path:point(path_point)) <= 0.13
+end
+
+function parse_waypoint_data(pathname, wpflags, wpname)
+
+	local rslt = {flags = wpflags}
+	local first_pipe_index = string_find(wpname, "|", 1, true)
+
+	if first_pipe_index == nil then
+		return rslt
+	end
+
+	local params = string_sub(wpname, first_pipe_index + 1)
+
+	if params == "" then
+		return rslt
+	end
+
+	for param in string_gfind(params, "[^|]+") do
+
+		local equal_sign_index = string_find(param, "=", 1, true)
+
+		if equal_sign_index == nil then
+			abort("[utils.parse_waypoint_data]: Path '%s', waypoint '%s': syntax error while parsing param '%s': no assignment operator ('=') found", pathname, wpname, param)
+		end
+
+		local field = string_sub(param, 1, equal_sign_index - 1)
+		local value = string_sub(param, equal_sign_index + 1)
+
+		if field == "" then
+			abort("[utils.parse_waypoint_data]: Path '%s', waypoint '%s': syntax error while parsing param '%s': no field specified", pathname, wpname, param)
+		end
+
+		if value == "" then
+			abort("[utils.parse_waypoint_data]: Path '%s', waypoint '%s': syntax error while parsing param '%s': no value specified", pathname, wpname, param)
+		end
+
+		if field == "a" then
+			rslt[field] = xr_logic.parse_condlist(nil, nil, nil, value)
+		else
+			rslt[field] = value
+		end
+	end
+
+	return rslt
+end
+
+function path_parse_waypoints(pathname)
+
+	if not pathname then
+		return nil
+	end
+
+	local ptr = patrol(pathname)
+	local rslt = {}
+
+	for pt = 0, ptr:count() - 1 do
+		rslt[pt] = parse_waypoint_data(pathname, ptr:flags(pt), ptr:name(pt)) -- always returns a table
+	end
+
+	return rslt
+end
+
+function path_parse_waypoints_from_arglist(pathname, num_points, ...)
+
+	if not pathname then
+		return nil
+	end
+
+	local cnt = patrol(pathname):count()
+
+	if cnt ~= num_points then
+		abort("[utils.path_parse_waypoints_from_arglist]: path '%s' has %d points, but %d points were expected", pathname, cnt, num_points)
+	end
+
+	local arg = {...}
+	local rslt = {}
+
+	for pt = 0, cnt - 1 do
+		local cur_arg = arg[pt + 1]
+		if not cur_arg then
+			abort("[utils.path_parse_waypoints_from_arglist]: script error [1] while processing point %d of path '%s'", pt, pathname)
+		end
+		local flags = flags32()
+		flags:assign(cur_arg[1])
+		rslt[pt] = parse_waypoint_data(pathname, flags, cur_arg[2]) -- always returns a table
+	end
+
+	return rslt
+end
+
+function parse_params(str)
+	local params = {}
+	local n = 1
+	for param in string_gfind(str, "[^|]+") do
+		params[n] = param
+		n = n + 1
+	end
+	return params
+end
+
+function npc_in_zone(npc, zone)
+	return npc ~= nil and zone ~= nil and zone:inside(npc:position())
+end
+
+local CTime_0
+
+if not editor() then
+	CTime_0 = game.CTime()
+end
+
+function w_CTime(p, t)
+
+	if t == nil then
+		p:w_u8(-1)
+		return
+	end
+
+	if (CTime == nil) or (t ~= CTime_0) then
+		-- Note: get() requires variable references (not int literals) as args,
+		-- so the assignment below must be done in two steps:
+		local Y, M, D, h, m, s, ms = 0, 0, 0, 0, 0, 0, 0
+		      Y, M, D, h, m, s, ms = t:get(Y, M, D, h, m, s, ms)
+		p:w_u8(Y - 2000)
+		p:w_u8(M)
+		p:w_u8(D)
+		p:w_u8(h)
+		p:w_u8(m)
+		p:w_u8(s)
+		p:w_u16(ms)
+	else
+		p:w_u8(0)
+	end
+end
+
+function r_CTime(p)
+
+	local Y = p:r_u8()
+	if Y == 255 then
+		return nil
+	end
+
+	if Y ~= 0 then
+		local t = game.CTime()
+		local M, D, h, m, s, ms = p:r_u8(), p:r_u8(), p:r_u8(), p:r_u8(), p:r_u8(), p:r_u16()
+		t:set(Y + 2000, M, D, h, m, s, ms)
+		return t
+	else
+		return 0
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function send_to_nearest_accessible_vertex(npc, v_id)
+	if not npc:accessible(v_id) then
+		local vtemp = vector()
+		v_id, vtemp = npc:accessible_nearest(level.vertex_position(v_id), vtemp)
+	end
+	npc:set_dest_level_vertex_id(v_id)
+	return v_id
+end
+
+function level_changing()
+	local sim = _G.sim
+	return sim ~= nil and game_graph():vertex(sim:actor().m_game_vertex_id):level_id() ~= sim:level_id()
+end
+
+function parse_data_1v(_, str) -- TODO: only 'str' is used
+	local t = {}
+	if str then
+		for bone_index, section in string_gfind(str, "(%d+)|([^|]+)") do
+			t[tonumber(bone_index)] = {state = xr_logic.parse_condlist(nil, nil, nil, section)}
+		end
+	end
+	return t
+end
+
+function parse_names(str)
+	return _G.parse_names(str)
+end
+
+function parse_spawns(str)
+	local fields = parse_names(str)
+	local spawns = {}
+	local c = 0
+	for i = 1, #fields, 2 do
+		c = c + 1
+		spawns[c] = {section = fields[i], prob = tonumber(fields[i + 1]) or 1}
+	end
+	return spawns
+end
+
+function r_2nums(ini, section, line, def1, def2)
+	local t = ini:line_exist(section, line) and parse_names(ini:r_string(section, line))
+	if not t or #t == 0 then
+		return def1, def2
+	elseif #t == 1 then
+		return t[1], def2
+	else
+		return t[1], t[2]
+	end
+end
+
+function parse_target(target)
+	local pos = string_find(target, ",", 1, true)
+	if pos then
+		return string_sub(target, 1, pos - 1), string_sub(target, pos + 1)
+	else
+		return target, nil
+	end
+end

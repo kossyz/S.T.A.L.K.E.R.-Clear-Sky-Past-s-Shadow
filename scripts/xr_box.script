@@ -1,0 +1,126 @@
+-- DC150425: Optimized this.
+-- DC170503: Even more.
+
+local items_by_box_type = {}
+local limits_by_item    = {}
+local inited            = false
+
+local function init_box()
+	local ini = ini_file("misc\\ph_box_generic.ltx")
+	if not ini:section_exist("box_types") then
+		abort("[xr_box.init_box]: There is no section [box_types] in misc\\ph_box_generic.ltx or any of its includes.")
+	end
+	for i = 0, ini:line_count("box_types") - 1 do
+		local _, box_type = ini:r_line("box_types", i, "", "")
+		if not ini:section_exist(box_type) then
+			abort("[xr_box.init_box]: There is no section [%s] in misc\\ph_box_generic.ltx or any of its includes, despite being listed under section [box_types].", box_type)
+		end
+		local prob_by_item = {}
+--		dbglog("items_by_box_type['%s'] = {}", box_type)
+		items_by_box_type[box_type] = prob_by_item
+		for i = 0, ini:line_count(box_type) - 1 do
+			local _, item_name, prob = ini:r_line(box_type, i, "", "")
+			prob = tonumber(prob)
+			if prob ~= 0 then
+--				dbglog("items_by_box_type['%s']['%s'] = %g", box_type, item_name, prob)
+				prob_by_item[item_name] = prob
+--			else
+--				dbglog("items_by_box_type['%s']['%s'] = 0 (omitted)", box_type, item_name)
+			end
+		end
+	end
+	local level_name = level.name()
+--	dbglog("level.name() = '%s'", level_name)
+	if not ini:section_exist(level_name) then
+		level_name = "default"
+	end
+	local multiplier_by_item = {}
+	for i = 0, ini:line_count(level_name) - 1 do
+		local _, item_name, multiplier = ini:r_line(level_name, i, "", "")
+--		dbglog("multiplier_by_item['%s'] = %s", item_name, multiplier)
+		multiplier_by_item[item_name] = tonumber(multiplier)
+	end
+	local item_count_section = "item_count_"..level.get_game_difficulty()
+	if not ini:section_exist(item_count_section) then
+		abort("[xr_box.init_box]: There is no section [%s] in misc\\ph_box_generic.ltx or any of its includes.", item_count_section)
+	end
+	for i = 0, ini:line_count(item_count_section) - 1 do
+		local _, item_name, counts = ini:r_line(item_count_section, i, "", "")
+		local t = parse_nums(counts)
+		local min = t[1] or abort("[xr_box.init_box]: Missing value for parameter '%s' in section '%s' in misc\\ph_box_generic.ltx or one of its includes.", item_name, item_count_section)
+		local max = t[2] or min
+		local multiplier = multiplier_by_item[item_name] or 0
+--		dbglog("limits_by_item['%s'] = {min = %d, max = %d}", item_name, min * multiplier, max * multiplier)
+		limits_by_item[item_name] = {min = min * multiplier, max = max * multiplier}
+	end
+end
+
+local function spawn_predefined_items(box, ini)
+
+	local sim = _G.sim
+	local box_pos = box:position()
+	local box_lvid = box:level_vertex_id()
+	local box_gvid = box:game_vertex_id()
+	local spawns = utils.parse_spawns(ini:r_string("drop_box", "items"))
+
+	for i = 1, #spawns do
+		local spawn = spawns[i]
+		local section = spawn.section
+		for j = 1, spawn.prob do
+			sim:create(section, box_pos, box_lvid, box_gvid)
+		end
+	end
+end
+
+local function spawn_randomized_items(box, ini)
+
+	local spawn_items = ini:line_exist("drop_box", "community")
+	                    and items_by_box_type[ini:r_string("drop_box", "community")]
+	                    or items_by_box_type["def_box"]
+
+	local box_pos = box:position()
+	local box_lvid = box:level_vertex_id()
+	local box_gvid = box:game_vertex_id()
+
+	local sim, ammo_section, math_ceil, math_random
+	    = sim, ammo_section, math.ceil, math.random
+
+	for item_name, spawn_prob in pairs (spawn_items) do
+		local units = math_ceil(math_random(limits_by_item[item_name].min, limits_by_item[item_name].max))
+		if units > 0 then
+			if ammo_section[item_name] then
+				if math_random() < spawn_prob then
+					se_respawn.create_ammo(item_name, box_pos, box_lvid, box_gvid, 65535, units)
+				end
+			else
+				for i = 1, units do
+					if math_random() < spawn_prob then
+						sim:create(item_name, box_pos, box_lvid, box_gvid)
+					end
+				end
+			end
+		end
+	end
+end
+
+class "ph_item_box"
+
+function ph_item_box:__init(box)
+	self.box = box
+	if not inited then
+		init_box()
+		inited = true
+	end
+end
+
+function ph_item_box:spawn_items()
+
+	local box = self.box
+	local ini = box:spawn_ini()
+
+	if ini:line_exist("drop_box", "items") then
+		spawn_predefined_items(box, ini)
+	else
+		spawn_randomized_items(box, ini)
+	end
+end

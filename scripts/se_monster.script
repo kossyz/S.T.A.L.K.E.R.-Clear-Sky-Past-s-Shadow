@@ -1,0 +1,119 @@
+-- DC170520: Optimization.
+
+class "se_monster" (cse_alife_monster_base)
+
+--------------------
+
+function se_monster:__init(section) super(section)
+	self.ini                = nil
+	self.squad_id           = nil
+	self.sim_forced_online  = false
+end
+
+--------------------
+
+function se_monster:can_switch_offline()
+	if self.sim_forced_online then
+		return false
+	end
+	return cse_alife_monster_base.can_switch_offline(self)
+end
+
+function se_monster:can_switch_online()
+	if self.sim_forced_online then
+		return true
+	end
+	return cse_alife_monster_base.can_switch_online(self)
+end
+
+--------------------
+
+function se_monster:switch_online()
+	cse_alife_monster_base.switch_online(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil then
+			squad:switch_online(true, self.id)
+		end
+	end
+end
+
+function se_monster:switch_offline()
+	cse_alife_monster_base.switch_offline(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil then
+			squad:switch_online(false, self.id)
+		end
+	end
+end
+
+--------------------
+
+function se_monster:STATE_Write(packet)
+	cse_alife_monster_base.STATE_Write(self, packet)
+	packet:w_u8(2) -- always 2 in vanilla; not used (but unsafe to delete)
+	packet:w_stringZ(self.squad_id or "nil")
+	packet:w_bool(self.sim_forced_online)
+end
+
+function se_monster:STATE_Read(packet, size)
+	cse_alife_monster_base.STATE_Read(self, packet, size)
+	packet:r_u8() -- always 2 in vanilla; not used (but unsafe to delete)
+	self.squad_id = packet:r_stringZ()
+	if self.squad_id == "nil" then
+		self.squad_id = nil
+	end
+	self.sim_forced_online = packet:r_bool()
+end
+
+--------------------
+
+function se_monster:on_before_register()
+	self.ini = self:spawn_ini()
+end
+
+function se_monster:on_register()
+	cse_alife_monster_base.on_register(self)
+	self.board = sim_board.get_sim_board()
+	self:brain():can_choose_alife_tasks(false)
+end
+
+function se_monster:on_unregister()
+	local strn_id = self:smart_terrain_id()
+	if strn_id ~= 65535 then
+		local smart = _G.sim:object(strn_id)
+		if smart ~= nil then
+			smart:unregister_npc(self)
+		end
+	end
+	cse_alife_monster_base.on_unregister(self)
+end
+
+--------------------
+
+function se_monster:on_death(killer)
+	cse_alife_monster_base.on_death(self, killer)
+	smart_terrain.on_death(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad == nil then
+			abort("[se_monster:on_death]: There is no squad with ID '%s'.", self.squad_id)
+		end
+		squad:on_npc_death(self, killer.id)
+	end
+end
+
+--------------------
+
+local cse_alife_monster_base_update = cse_alife_monster_base.update
+
+function se_monster:update()
+	cse_alife_monster_base_update(self)
+	if self.squad_id ~= nil then
+		local squad = self.board.squads[self.squad_id]
+		if squad ~= nil and squad.commander_id == self.id then
+			squad:update()
+		end
+	end
+end
