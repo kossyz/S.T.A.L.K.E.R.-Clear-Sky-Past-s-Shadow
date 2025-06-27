@@ -1,0 +1,465 @@
+--схема удаления трупов 
+local summ_corpses = 15 --общее допустимое число трупов на всех локаци€х (не включа€ —»ƒ)
+local dist_to_corpses = 20 --расстояние от гг, свыше которого считаютс€ трупы.
+local tabl_corpses={}
+local tabl_corpses_9510={}
+
+--плюс схема удаления бесхозного оружия и боеприпасов
+local summ_weapons = 12 --общее допустимое число бесхозного оружи€ на всех локаци€х.
+local dist_to_weapons = 20 --рассто€ние от гг, свыше которого считается оружие и боеприпасы.
+local summ_ammos = 22 --общее допустимое число бесхозных боеприпасов на всех локаци€х.
+local dist_from_weapons_to_trup = 4 --рассто€ние от трупа, свыше которого считается оружие и боеприпасы.
+local tabl_weapons={}
+local tabl_ammos={}
+local tabl_ammos_free={}
+
+local excl_weapons={	
+   "mar_wpn_ak74u",
+   "mar_wpn_ak74u_0000",
+   "mar_wpn_addon_scope",
+   "mar_wpn_ak74u_0001",
+   "mar_wpn_addon_scope_0000",
+   "mar_wpn_mp5",
+   "mar_wpn_vintorez",
+   "esc_wpn_ak74u",
+   "esc_grenade_rgd5",
+   "esc_grenade_rgd5_0000",
+   "esc_grenade_rgd5_0001",
+   "esc_grenade_rgd5_0002",
+   "esc_grenade_rgd5_0003",
+   "esc_wpn_wincheaster1300",
+   "esc_grenade_rgd5_0004",
+   "esc_wpn_fort",
+   "gar_wpn_pm",
+   "agr_no_wpn_zone_1",
+   "agr_wpn_walther",
+   "agr_no_wpn_zone_2",
+   "agr_no_wpn_zone_3",
+   "agr_no_wpn_zone_master",
+   "agr_grenade_rgd5",
+   "red_wpn_rg-6",
+   "mil_wpn_ak74",
+   "mil_wpn_ak74_0000",
+   "mil_wpn_ak74_0001",
+   "mil_wpn_ak74_0002",
+   "mil_grenade_f1",
+   "mil_grenade_f1_0000",
+   "mil_grenade_f1_0001",
+   "mil_wpn_abakan",
+   "mil_wpn_abakan_0000",
+   "mil_wpn_abakan_0001",
+   "mil_wpn_abakan_0002",
+   "lim_wpn_rg-6"
+	}
+local excl_ammos={
+   "mar_ammo_12x70_buck",
+   "mar_ammo_12x70_buck_0000",
+   "mar_ammo_5.45x39_fmj_0001",
+   "mar_ammo_5.45x39_fmj_0000",
+   "mar_ammo_5.45x39_fmj",
+   "mar_ammo_12x76_zhekan",
+   "esc_museum_ammo_12x70_buck",
+   "esc_museum_ammo_545x39_fmj",
+   "esc_museum_ammo_762x54_7h14",
+   "esc_museum_ammo_545x39_fmj_0000",
+   "esc_museum_ammo_12x70_buck_0000",
+   "esc_museum_ammo_12x70_buck_0001",
+   "esc_museum_ammo_545x39_fmj_0001",
+   "esc_ammo_12x70_buck",
+   "esc_ammo_12x70_buck_0000",
+   "esc_ammo_12x76_dart",
+   "esc_ammo_12x76_dart_0000",
+   "esc_ammo_12x70_buck_0001",
+   "esc_ammo_12x76_dart_0001",
+   "esc_ammo_5.45x39_fmj",
+   "esc_ammo_5.45x39_fmj_0000",
+   "esc_ammo_5.45x39_fmj_0001",
+   "esc_ammo_5.45x39_fmj_0002",
+   "esc_ammo_9x18_pmm",
+   "esc_ammo_9x18_pmm_0000",
+   "esc_ammo_12x76_zhekan",
+   "gar_ammo_9x18_fmj",
+   "gar_ammo_9x18_fmj_0000",
+   "gar_ammo_9x18_fmj_0001",
+   "agr_ammo_7.62x54_ap",
+   "agr_ammo_7.62x54_ap_0000",
+   "agr_ammo_5.56x45_ss190",
+   "agru_ammo_7.62x54_7h14",
+   "agru_ammo_7.62x54_7h14_0000",
+   "agru_ammo_12x76_dart",
+   "agru_ammo_12x76_dart_0000",
+   "agru_ammo_5.45x39_fmj",
+   "agru_ammo_5.45x39_fmj_0000",
+   "agru_ammo_5.56x45_ss190",
+   "agru_ammo_5.56x45_ss190_0000",
+   "red_ammo_vog-25",
+   "red_ammo_vog-25_0000",
+   "red_ammo_vog-25_0001",
+   "mil_ammo_7.62x54_7h14",
+   "mil_ammo_7.62x54_7h14_0000",
+   "mil_ammo_5.56x45_ss190",
+   "mil_ammo_5.56x45_ss190_0000",
+   "mil_ammo_5.45x39_fmj",
+   "mil_ammo_5.45x39_fmj_0000",
+   "mil_ammo_5.45x39_ap"
+	}
+local excl_corps={
+   "mar_recover_item_1_corpse",
+   "mar_stalker_0000",
+   "mar_stalker_0001",
+   "mar_stalker_0002",
+   "mar_stalker_0003",
+   "mar_recover_item_3_stalker",
+   "mar_recover_item_4_corpse",
+   "mar_stalker",
+   "mar_stalker_0004",
+   "mar_stalker_0005",
+   "mar_recover_item_1_corpse_0000",
+   "mar_recover_item_1_corpse_0001",
+   "mar_stalker_0006",
+   "mar_stalker_0007",
+   "mar_recover_item_1_corpse_0002",
+   "mar_recover_item_1_corpse_0003",
+   "mar_recover_item_1_corpse_0004",
+   "mar_recover_item_1_corpse_0005",
+   "mar_recover_item_1_corpse_0006",
+   "mar_recover_item_1_corpse_0007",
+   "mar_stalker_0008",
+   "mar_stalker_0009",
+   "mar_stalker_0010",
+   "mar_stalker_0011",
+   "mar_stalker_0012",
+   "esc_military_dead",
+   "esc_stalker_corpse",
+   "esc_stalker_corpse_0000",
+   "esc_stalker_corpse_0001",
+   "esc_stalker_corpse_0002",
+   "esc_stalker_corpse_0003",
+   "esc_stalker_corpse_0004",
+   "esc_stalker_corpse_0005",
+   "esc_stalker",
+   "gar_stalker",
+   "gar_stalker_0000",
+   "gar_stalker_0001",
+   "gar_sim_default_digger_0",
+   "gar_sim_default_digger_1",
+   "gar_sim_default_digger_2",
+   "gar_stalker_0002",
+   "gar_stalker_corpse",
+   "gar_stalker_corpse_0000",
+   "gar_stalker_corpse_0001",
+   "gar_stalker_corpse_0002",
+   "gar_stalker_corpse_0003",
+   "gar_stalker_corpse_0004",
+   "gar_stalker_corpse_0005",
+   "gar_stalker_corpse_0006",
+   "gar_stalker_corpse_0007",
+   "gar_recover_item_4_corpse",
+   "gar_recover_item_1_corpse",
+   "gar_recover_item_2_corpse",
+   "val_freedom_dead_blockpost",
+   "val_freedom_dead_blockpost_1",
+   "val_freedom_dead_blockpost_2",
+   "val_freedom_dead_blockpost_3",
+   "val_gmur_comendanta",
+   "val_zmur_corecha_texnika",
+   "val_stalker_sakharov",
+   "val_stalker_sakharov_0000",
+   "val_stalker_monolith",
+   "val_stalker_strelok",
+   "val_stalker_strelok_0000",
+   "val_stalker_corpse",
+   "val_stalker_corpse_0000",
+   "val_stalker_corpse_0001",
+   "val_stalker_corpse_0002",
+   "val_stalker_corpse_0003",
+   "val_stalker_corpse_0004",
+   "val_stalker",
+   "val_stalker_0000",
+   "val_stalker_0001",
+   "val_stalker_0002",
+   "val_recover_item_1_spawn",
+   "agr_stalker_corpse",
+   "agr_stalker_corpse_0001",
+   "agr_stalker_corpse_0002",
+   "agr_stalker_corpse_0000",
+   "agr_stalker_corpse_0004",
+   "yan_stalker_0000",
+   "yan_stalker_0001",
+   "yan_stalker_0002",
+   "yan_stalker_0003",
+   "yan_stalker_0004",
+   "yan_stalker_0005",
+   "yan_recover_item_1_corpse",
+   "yan_stalker_trader_0000",
+   "red_recover_item_3_spawn",
+   "red_stalker_0000",
+   "red_stalker_die_hard",
+   "red_stalker_0006",
+   "red_stalker_0007",
+   "red_stalker_0008",
+   "red_stalker_0009",
+   "red_stalker_0010",
+   "red_stalker_0011",
+   "red_stalker_0012",
+   "red_recover_item_1_spawn",
+   "red_stalker_0014",
+   "red_stalker_0015",
+   "red_stalker_0016",
+   "mil_stalker_freedom_dead",
+   "mil_sim_default_military_3",
+   "mil_sim_default_military_3_0000",
+   "mil_sim_default_military_2",
+   "mil_sim_default_military_3_0001",
+   "mil_sim_default_military_3_0002",
+   "lim_stalker_0013",
+   "lim_stalker_0022",
+   "lim_stalker_0023",
+   "lim_stalker_0024",
+   "lim_stalker_0025",
+   "lim_stalker_0026",
+   "lim_stalker_0027",
+   "lim_stalker_0028",
+   "lim_stalker_0029",
+   "lim_stalker_0030",
+   "lim_stalker_0031",
+   "lim_stalker_0032",
+   "lim_stalker_0033",
+   "lim_stalker_0034",
+   "lim_stalker_0035",
+   "lim_stalker_0036",
+   "lim_stalker_0037"
+	}
+	
+function off_corpses()
+	for id=1,65535 do
+		local obj = alife():object(id)
+		if obj then
+			local posobj = obj.position
+			local actorpos = db.actor:position()
+			local obj_name = obj:name()
+			local parent_id = obj.parent_id
+			local sect = obj:section_name()
+			if posobj and actorpos and obj_name and parent_id and sect then
+				if IsStalker(obj) and not obj:alive() and not get_excluded(1,obj_name) then
+					if posobj:distance_to(actorpos) > dist_to_corpses then 
+						if obj.m_story_id and obj.m_story_id > 9510 then 
+							--dbglog("tabl_corpses = '%s'==",tostring(obj_name))
+							table.insert(tabl_corpses,id)
+						else
+							--dbglog("tabl_corpses_9510 = '%s'==",tostring(obj_name))
+							table.insert(tabl_corpses_9510,id)
+						end
+					end
+				elseif (posobj:distance_to(actorpos) > dist_to_weapons) then
+					if parent_id == 65535 and (string.find(obj_name,"wpn_") or string.find(obj_name,"grenade_")) and not get_excluded(2,obj_name) then 
+						--dbglog("tabl_weapons = '%s'==",tostring(obj_name))
+						table.insert(tabl_weapons,id)
+					end
+					if string.find(obj_name,"ammo_") and not get_excluded(3,obj_name) then
+						if parent_id == 65535 then 
+							--dbglog("tabl_ammos = '%s'==",tostring(obj_name))
+							table.insert(tabl_ammos,id)
+						else
+							if tabl_ammos_free[parent_id] == nil then
+								tabl_ammos_free[parent_id] = {}
+							end
+							if tabl_ammos_free[parent_id][sect] == nil then
+								tabl_ammos_free[parent_id][sect] = {}
+							end
+							--dbglog("tabl_ammos_box = '%s'==",tostring(obj_name))
+							--dbglog("box_name = '%s'==",tostring(alife():object(parent_id):name()))
+							table.insert(tabl_ammos_free[parent_id][sect],id)
+						end
+					end
+				end
+			end
+		end
+	end
+	local cnt = 0
+	local n
+	for k,v in pairs(tabl_ammos_free) do
+		local box = alife():object(k)
+		if box and string.find(box:name(), "box") and string.find(box:name(), "smart_terrain") then
+			for kk,vv in pairs(v) do
+				n = table.getn(vv)
+				-- оставл€ем не больше 5 пачек каждого типа
+				if n > 10 then
+					for i=11,n do
+						cnt = cnt + 1
+						alife():release(alife():object(vv[i]), true)
+					end
+				end
+			end
+		end
+	end
+	if table.getn(tabl_corpses) > summ_corpses then
+		table.sort(tabl_corpses,max_comp)
+		--[[if table.getn(tabl_corpses) > summ_corpses*3 then
+			local  b = table.getn(tabl_corpses)
+			while b > summ_corpses*3 do
+				local corps = alife():object(tabl_corpses[b])
+				alife():release(corps,true)
+				--dbglog("corps_remove1 = '%s'==",tostring(corps:name()))
+				table.remove(tabl_corpses,b)
+				b=b-1
+			end
+		end]]--
+		if table.getn(tabl_corpses) > summ_corpses then
+			local  b = table.getn(tabl_corpses)
+			while b > summ_corpses do
+				local corps = alife():object(tabl_corpses[b])
+				if not item_found(corps) then
+					alife():release(corps,true)
+					--dbglog("corps_remove2 = '%s'==",tostring(corps:name()))
+					table.remove(tabl_corpses,b)
+				end
+				b=b-1
+			end
+		end
+		if table.getn(tabl_corpses) > summ_corpses then
+			local  b = table.getn(tabl_corpses)
+			while b > summ_corpses do
+				local corps = alife():object(tabl_corpses[b])
+				--dbglog("corps_remove3 = '%s'==",tostring(corps:name()))
+				alife():release(corps,true)
+				table.remove(tabl_corpses,b)
+				b=b-1
+			end
+		end
+	end
+	if table.getn(tabl_weapons) > summ_weapons then
+		table.sort(tabl_weapons,max_comp)
+		local twa = table.getn(tabl_weapons)
+		while twa > summ_weapons do
+			local wpn = alife():object(tabl_weapons[twa])
+			local wpn_name = wpn:name()
+			if get_dist_to_trup(wpn,2) and get_dist_to_trup(wpn,1) and not string.find(wpn_name,"wpn_gauss") and not string.find(wpn_name,"wpn_svd") and not string.find(wpn_name,"wpn_vintorez") and not string.find(wpn_name,"wpn_svu") and not string.find(wpn_name,"wpn_fn2000") and not string.find(wpn_name,"wpn_saiga12c") and not string.find(wpn_name,"wpn_rpg7") and not string.find(wpn_name,"wpn_desert_eagle") and not string.find(wpn_name,"wpn_toz34") and not string.find(wpn_name,"wpn_rg-6") then
+				local weapon = alife():object(tabl_weapons[twa])
+				--dbglog("weapon_remove1 = '%s'==",tostring(weapon:name()))
+				alife():release(weapon,true)
+				table.remove(tabl_weapons,twa)
+			end
+			twa=twa-1
+		end
+		--[[if table.getn(tabl_weapons) > summ_weapons then 
+			local twb = table.getn(tabl_weapons)
+			while twb > summ_weapons do
+				local wpn = alife():object(tabl_weapons[twb])
+				local wpn_name = wpn:name()
+				if get_dist_to_trup(wpn,2) and not string.find(wpn_name,"wpn_svd") and not string.find(wpn_name,"wpn_vintorez") and not string.find(wpn_name,"wpn_svu") and not string.find(wpn_name,"wpn_rpg7") and not string.find(wpn_name,"wpn_rg-6") then 
+					local weapon = alife():object(tabl_weapons[twb])
+					--dbglog("weapon_remove2 = '%s'==",tostring(weapon:name()))
+					alife():release(weapon,true)
+					table.remove(tabl_weapons,twb)
+				end
+				twb=twb-1
+			end]]--
+			if table.getn(tabl_weapons) > summ_weapons then
+				local twc = table.getn(tabl_weapons)
+				while twc > summ_weapons do
+					local weapon = alife():object(tabl_weapons[twc])
+					--dbglog("weapon_remove3 = '%s'==",tostring(weapon:name()))
+					alife():release(weapon,true)
+					table.remove(tabl_weapons,twc)
+					twc=twc-1
+				end
+			end
+		--end
+	end
+	if table.getn(tabl_ammos) > summ_ammos then
+		table.sort(tabl_ammos,max_comp)
+		local twa = table.getn(tabl_ammos)
+		while twa > summ_ammos do
+			local ammo = alife():object(tabl_ammos[twa])
+			local ammo_name = ammo:name()
+			if get_dist_to_trup(ammo,2) and get_dist_to_trup(ammo,1) and not string.find(ammo_name,"ammo_pkm_100") and not string.find(ammo_name,"ammo_7.62x54_7h1") and not string.find(ammo_name,"ammo_7.62x54_ap") and not string.find(ammo_name,"ammo_7.62x54_7h14") and not string.find(ammo_name,"ammo_223_fmj") and not string.find(ammo_name,"ammo_gauss") and not string.find(ammo_name,"ammo_9x39_pab9") and not string.find(ammo_name,"ammo_9x39_ap") and not string.find(ammo_name,"ammo_9x39_sp5") and not string.find(ammo_name,"ammo_vog-25p") and not string.find(ammo_name,"ammo_m209") and not string.find(ammo_name,"ammo_og-7b") then
+				local ammos = alife():object(tabl_ammos[twa])
+				--dbglog("ammos_remove1 = '%s'==",tostring(ammos:name()))
+				alife():release(ammos,true)
+				table.remove(tabl_ammos,twa)
+			end
+			twa=twa-1
+		end
+		--[[if table.getn(tabl_ammos) > summ_ammos then 
+			local twb = table.getn(tabl_ammos)
+			while twb > summ_ammos do
+				local ammo = alife():object(tabl_ammos[twb])
+				local ammo_name = ammo:name()
+				if get_dist_to_trup(ammo,2) and not string.find(ammo_name,"ammo_pkm_100") and not string.find(ammo_name,"ammo_7.62x54_7h14") and not string.find(ammo_name,"ammo_gauss") and not string.find(ammo_name,"ammo_9x39_sp5") and not string.find(ammo_name,"ammo_og-7b") then 
+					local ammos = alife():object(tabl_ammos[twb])
+					--dbglog("ammos_remove2 = '%s'==",tostring(ammos:name()))
+					alife():release(ammos,true)
+					table.remove(tabl_ammos,twb)
+				end
+				twb=twb-1
+			end]]--
+			if table.getn(tabl_ammos) > summ_ammos then
+				local twc = table.getn(tabl_ammos)
+				while twc > summ_ammos do
+					local ammos = alife():object(tabl_ammos[twc])
+					--dbglog("ammos_remove3 = '%s'==",tostring(ammos:name()))
+					alife():release(ammos,true)
+					table.remove(tabl_ammos,twc)
+					twc=twc-1
+				end
+			end
+		--end
+	end
+end 
+
+function get_excluded(tab,obj_name)
+	local tabl
+	if tab==1 then tabl=excl_corps end
+	if tab==2 then tabl=excl_weapons end
+	if tab==3 then tabl=excl_ammos end
+	for k,v in pairs(tabl) do 
+		if obj_name==v then
+			return true
+		end
+	end
+	return false
+end
+
+function get_dist_to_trup(wpn,tab)
+	local tabl
+	if tab==1 then tabl=tabl_corpses end
+	if tab==2 then tabl=tabl_corpses_9510 end
+	for i=1,table.getn(tabl) do
+		local npc = alife():object(tabl[i])
+		if npc then
+			local posnpc = npc.position
+			local poswpn = wpn.position
+			if poswpn and posnpc and (poswpn:distance_to(posnpc) < dist_from_weapons_to_trup) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function item_found(corps)
+	for i=1,65535 do
+		local item = alife():object(i)
+		if item then 
+			if item.parent_id and item.parent_id == corps.id then
+				local item_name = item:name()
+				if string.find(item_name,"ammo") or string.find(item_name,"outfit") or string.find(item_name,"exo") or string.find(item_name,"wpn_") or string.find(item_name,"bread") or string.find(item_name,"kolbasa") or string.find(item_name,"conserva") or string.find(item_name,"vodka") or string.find(item_name,"antirad") or string.find(item_name,"medkit") or string.find(item_name,"bandage") or string.find(item_name,"energy_drink") or string.find(item_name,"detector") or string.find(item_name,"dynamite") or string.find(item_name,"flash") or string.find(item_name,"quest") or string.find(item_name,"document") or string.find(item_name,"pda") or string.find(item_name,"case_") or string.find(item_name,"decoder") or string.find(item_name,"_key") or string.find(item_name,"_m1") or string.find(item_name,"_m2") or string.find(item_name,"mutant_") or string.find(item_name,"af_") or string.find(item_name,"diplomat") or string.find(item_name,"sakbox") or string.find(item_name,"sak_") or string.find(item_name,"_book") or string.find(item_name,"playboy") then
+					return true
+				end
+			end
+		end 
+	end
+	return false
+end
+
+function max_comp(i1,i2) -- возвращает true если i1 меньше i2
+	local actorpos = db.actor:position()
+	return alife():object(i1).position:distance_to(actorpos) < alife():object(i2).position:distance_to(actorpos)
+end
+
+function dbglog(fmt,...)    
+local msg = string.format(fmt, ...)    
+local msg_no_ws = string.gsub(msg, "%s", "_" )    
+get_console():execute("dbg:" .. msg_no_ws)
+end

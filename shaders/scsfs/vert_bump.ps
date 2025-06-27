@@ -1,0 +1,58 @@
+#include "common.h"
+#include "lmodel.h"
+#include "hmodel.h"
+
+struct v2p
+{
+	float2 tc0		: TEXCOORD0;
+	float3 M1		: TEXCOORD1;
+	float3 M2		: TEXCOORD2;
+	float3 M3		: TEXCOORD3;
+	float4 position	: TEXCOORD4;
+//	float4 hpos		: SV_Position;
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Pixel
+float4 main( v2p I ) : SV_Target
+{
+	float3	eye 	= mul(float3x3(I.M1.x, I.M2.x, I.M3.x, I.M1.y, I.M2.y, I.M3.y, I.M1.z, I.M2.z, I.M3.z), -I.position.xyz);					 
+	float	height	= s_bumpX.Sample( smp_base, I.tc0).w;
+			height	= height*(parallax.x) + (parallax.y);
+	float2	new_tc  = I.tc0 + height * normalize(eye);
+	I.tc0			= new_tc;
+	
+	float4	D 		= s_base.Sample( smp_base, I.tc0 );	
+	float4 	Nu		= s_bump.Sample( smp_base, I.tc0 );
+	float4 	NuE		= s_bumpX.Sample( smp_base, I.tc0 );
+	float3 	normal	= Nu.wzyx + (NuE.xyz - 1.0f);
+			normal.z *=	0.5f;
+	float 	gloss	= Nu.x*Nu.x;
+	
+	float3 	N		= mul (float3x3(I.M1, I.M2, I.M3), normal);
+			N		= normalize(N);
+	
+	float3 	P 		= I.position.xyz + N * def_virtualh * 0.5f; //NuE.z
+	float 	mtl 	= xmaterial;
+	float 	h		= I.position.w;
+	
+	float3	hdiffuse, hspecular;
+	hmodel(hdiffuse, hspecular, mtl, h, gloss, P, N);
+	
+		float L_sun_dir_e = xmaterial		;
+	
+	float4	L		= float4(L_sun_color.xyz, 1.0f) * plight_infinity(mtl, P, N, L_sun_dir_e);	//Zaoglsky
+	//float4	L		= float4(L_sun_color.xyz, 1.0f) * plight_infinity(mtl, P, N, 0);	//CS Diesel//bugs 
+	float4	light	= float4(L.rgb + hdiffuse, L.w);
+	float4	C		= float4(D.rgb, gloss) * light;
+	float3	spec	= C.www + hspecular;
+	float3	color	= C.rgb + spec;
+	
+	float	distance = length(P);
+	float	fog		= saturate(distance * fog_params.w + fog_params.x);
+			color	= lerp(color, fog_color, fog);
+
+	// out
+	return  float4	(color, D.a);
+}

@@ -1,0 +1,285 @@
+#include "common.h"
+
+//#define USE_SUPER_SPECULAR
+//#define USE_ORIGINAL_SSAO
+//#define HBAO_WORLD_JITTER
+
+#define USE_HEMI_SATURATION
+
+#include "lmodel.h"
+#include "hmodel.h"
+
+uniform	Texture2D					s_half_depth;
+
+//#include "ssao_blur.ps"
+
+#ifdef HDAO
+#define USE_HDAO 1
+#endif
+
+#ifdef SM_5
+Texture2D<float> s_occ;
+#endif // SM_5
+
+//#ifdef SSAO_QUALITY
+//#undef SSAO_QUALITY
+//#define SSAO_QUALITY 4
+//#endif
+
+#if SSAO_QUALITY <=3
+#include "ssao.ps"
+//#ifdef SM_5
+//#undef SM_5
+//#endif
+#else
+#ifndef USE_HDAO
+#define USE_HDAO
+#endif
+#endif
+
+#ifdef USE_HDAO
+#if SSAO_QUALITY > 3
+#include "ssao_hdao_new.ps"
+#endif
+#define USE_HDAO_CODE
+#if SSAO_QUALITY <=3
+#define  g_f2RTSize ( pos_decompression_params2.xy )
+//#define  g_f2RTSize float2( 1280.0f, 1024.0f )
+#ifdef GBUFFER_OPTIMIZATION
+#define g_txDepth s_position
+#define g_txNormal s_position
+#else
+#define g_txDepth s_position
+#define g_txNormal s_normal
+#endif
+#include "ssao_hdao.ps"
+#endif
+#else // USE_HDAO
+#ifdef	USE_HBAO
+#include "ssao_hbao.ps"
+#endif	//	USE_HBAO
+#endif // USE_HDAO
+
+struct	_input
+{
+	float4	tc0	: TEXCOORD0;	// tc.xy, tc.w = tonemap scale
+	float2	tcJ	: TEXCOORD1;	// jitter coords
+	float4 pos2d : SV_Position;
+};
+
+struct	_out
+{
+	float4	low		: SV_Target0;
+	float4	high	: SV_Target1;
+};
+
+//	TODO:	DX10: Replace Sample with Load
+#ifndef MSAA_OPTIMIZATION
+_out main ( _input I )
+#else
+_out main ( _input I, uint iSample : SV_SAMPLEINDEX )
+#endif
+{
+	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc0, I.pos2d, ISAMPLE) );
+	
+	// Sample the buffers:
+	float4	P = float4( gbd.P, gbd.mtl );	// position.(mtl or sun)
+	float4	N = float4( gbd.N, gbd.hemi );		// normal.hemi
+	float4	D = float4( gbd.C, gbd.gloss );		// rgb.gloss
+#ifndef USE_MSAA
+	float4	L = s_accumulator.Sample( smp_nofilter, I.tc0);	// diffuse.specular
+#else
+#	ifdef GBUFFER_OPTIMIZATION
+	float4	L = s_accumulator.Load( int3( I.pos2d.xy, 0 ), ISAMPLE);	// diffuse.specular
+#	else
+	float4   L = s_accumulator.Load( int3( I.tc0 * pos_decompression_params2.xy, 0 ), ISAMPLE );
+#	endif
+#endif
+
+#ifdef USE_SUPER_SPECULAR
+	{
+		float ds = dot( D.rgb, 1.h/3.h );
+		D.w = max( D.w, ds*ds/8.h );
+	}
+#endif
+
+#ifdef FORCE_GLOSS
+	D.w = FORCE_GLOSS; //cut engine
+#endif
+
+//CINEMATIC by macron
+ // D.rgb    =  1.7*(pow(D.rgb,1.0)); 
+//CINEMATIC by macron
+
+        // static sun
+	float mtl = P.w;
+
+#ifdef USE_R2_STATIC_SUN
+	float sun_occ = P.w*2;
+
+	mtl = xmaterial;
+	L += Ldynamic_color * sun_occ * plight_infinity	(mtl, P.xyz, N.xyz, Ldynamic_dir);
+#endif
+
+	// hemisphere
+	float3 hdiffuse, hspecular;
+
+	//  Calculate SSAO
+
+#ifdef USE_MSAA
+#	ifdef GBUFFER_OPTIMIZATION
+	int2	texCoord = I.pos2d;
+#	else
+	int2	texCoord = int2( I.tc0 * pos_decompression_params2.xy );
+#	endif
+#endif
+	
+/*#ifdef USE_SSAO_BLUR	
+#	ifndef USE_MSAA
+	float	occ = ssao_blur_ps(I.tc0);
+#	else
+	float   occ = ssao_blur_ps( texCoord, ISAMPLE );
+#	endif*/
+
+#ifdef USE_HDAO
+#ifdef SM_5
+#if SSAO_QUALITY > 3
+    float occ = s_occ.Sample( smp_nofilter, I.tc0);	
+#else // SSAO_QUALITY > 3
+	float occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+#endif // SSAO_QUALITY > 3
+#else // SM_5
+#if SSAO_QUALITY > 3
+	float occ = calc_new_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+#else // SSAO_QUALITY > 3
+	float occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+#endif // SSAO_QUALITY > 3
+#endif // SM_5
+#else // USE_HDAO
+#ifdef USE_HBAO
+	float occ = calc_hbao( P.z, N, I.tc0, I.pos2d );
+#else // USE_HBAO
+	float occ = calc_ssao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+#endif
+#endif // USE_HDAO
+	
+	hmodel	(hdiffuse, hspecular, mtl, N.w, D.w, P.xyz, N.xyz);
+//      hmodel		(hdiffuse, hspecular, mtl, 1, D.w, P.xyz, N.xyz);
+//	hdiffuse*=hdiffuse;			//. high contrast hemi
+//	hdiffuse*=(D.rgb*0.8 + 0.2h);	// rise texture contrast for diffuse lighting
+//	hdiffuse = 0.8;
+//	hdiffuse *= (occ*(D.rgb + .1h));
+	hdiffuse *= occ;
+	hspecular *= occ;
+
+        float4         light       = float4         (L.rgb + hdiffuse, L.w)        ;
+
+#ifdef USE_RAINBOW //опция Black HEMI
+        float4         C           = D*light*0.5   ;                             // rgb.gloss * light(diffuse.specular)
+#else //not USE_RAINBOW
+        float4         C           = D*light       ;                             // rgb.gloss * light(diffuse.specular)
+#endif //USE_RAINBOW
+
+//        float3         spec        = (C.rgb*.5h + .5h)*C.w + hspecular + hspecular + hspecular;			// replicated specular
+	float3         spec        = C.www         + hspecular;      // replicated specular
+
+#ifdef         USE_SUPER_SPECULAR
+                      spec      = (C.rgb*.5h + .5h)*C.w + hspecular*0.5        ;
+#endif
+//		float3       color     = C.rgb + D.rgb*spec     ;
+//		float3       color     = C.rgb + (D.rgb*spec+spec)/0.5h;
+		float3       color     = C.rgb + spec*0.5     ;
+//		float3       color     = C.rgb + D.rgb*spec+hspecular+hspecular     ;	//	More realistic and contrast specular - Ugrumiy edition
+
+////////////////////////////////////////////////////////////////////////////////
+/// For Test ///////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+#ifdef         DBG_TEST_NMAP
+//. hemi + sun + lighting + specular
+					color 	= 	hdiffuse + L.rgb + N;
+#endif
+
+#ifdef         DBG_TEST_NMAP_SPEC
+//. hemi + sun + lighting + specular
+					color 	= 	hdiffuse + L.rgb + N + spec;
+#endif
+
+#ifdef         DBG_TEST_LIGHT
+//. hemi + sun + lighting + specular
+					color 	= 	hdiffuse + L.rgb;
+#endif
+
+#ifdef         DBG_TEST_LIGHT_SPEC
+//. hemi + sun + lighting + specular
+					color 	= 	hdiffuse + L.rgb + spec;
+#endif
+
+#ifdef         DBG_TEST_SPEC
+//. only lighting and specular
+					color 		= spec;
+#endif
+////////////////////////////////////////////////////////////////////////////////
+
+        // here should be distance fog
+        float3        	pos        		= P.xyz;
+        float         	distance		= length		(pos);
+        float         	fog				= saturate		(distance*fog_params.w + fog_params.x); //
+                      	color			= lerp     		(color,fog_color,fog);        			//
+        float        	skyblend		= saturate		(fog*fog);
+
+#ifdef         DBG_TMAPPING
+	color                        	= D.xyz;
+#endif
+        float          	tm_scale        = I.tc0.w;                // interpolated from VS
+
+#ifdef        USE_SUPER_SPECULAR
+        color        	= spec          - hspecular	;
+#endif
+//		color 		= N; //show normals
+//		color                        	= D.xyz;
+//		color 
+
+//float3 color = (0.5 * (sign( gbd.N - gbd.N_org ) + 1.0 ) );
+//color = float3( abs( gbd.hemi - gbd.hemi_org), 0, abs( gbd.mtl - gbd.mtl_org) );
+//color = abs( gbd.N - gbd.N_org );
+		//color = occ; // holger test
+		//color = gbd.N;
+
+
+//macron
+//Повышаем насыщенность HEMI для экспериментальных локаций (верхняя часть). Работает круглосуточно, независимо от солнца.
+	#ifdef USE_HEMI_SATURATION
+	float grayhemi=dot(color.xyz,float3(0.03,0.059,0.011)); // x1 //чем больше, тем темнее, но ночью здания светлеют, поэтому не трогаем
+		#define HEMI_SATURATION float(.9)//Level of Grey. 0 is all grey (Black and White), 1 is no Grey (Why have this enabled?) //не трогаем
+		#define COLOR_SAT_HEMI_COEF float (0.97) //(0.95) //(0.85)//(1.50)//How much influence hemi lighting has on the saturation independed on sun. //Чем больше, тем цветастее.
+		color.xyz=lerp(float3(grayhemi,grayhemi,grayhemi),color.xyz,HEMI_SATURATION+(dot(L_hemi_color.xyz,float3(1,1,1))/3) *COLOR_SAT_HEMI_COEF);
+	#else //эффект Динамическая насыщенность. Чем сильнее солнце, тем насыщенность выше. Enables Saturation Filter, giving a grey like appearance to areas which are "unsafe".
+		#define COLOR_SATURATION float   (.9)//(.7)//.6	//Level of Grey. 0 is all grey (Black and White), 1 is no Grey (Why have this enabled?)
+		#define COLOR_SAT_SUN_COEF float (.23)//(.25)//(.37)//(.55)//.7	//How much influence sun lighting has on the saturation. 
+		float gray=dot(color.xyz,float3(0.3,0.59,0.11));
+		color.xyz=lerp(float3(gray,gray,gray),color.xyz,COLOR_SATURATION+(dot(Ldynamic_color.xyz,float3(1,1,1))/3)*COLOR_SAT_SUN_COEF);
+	#endif
+//macron
+
+        _out        	o;
+
+//меняем восприятие яркости для экспериментальных локаций.
+	#ifdef USE_HEMI_SATURATION
+        tonemap       (o.low, o.high, color, tm_scale/1.1);//для USE_HEMI_SATURATION
+        //tonemap       (o.low, o.high, color, tm_scale);//для USE_HEMI_SATURATION
+
+	#else 
+        tonemap        (o.low, o.high, color, tm_scale*0.5); //default tonemapping
+        //tonemap       (o.low, o.high, (color/10), (tm_scale*10) );//experiment
+	#endif
+
+                o.low.a = skyblend 	;
+		o.high.a= skyblend	;
+//		o.low	= skyblend;
+//		o.hight	= 0;
+
+	//o.low = float4(gbd.P,1);
+	//o.low = float4( 1.0f, 0.0f, 0.0f, 1.0f );
+
+		return        	o;
+}
