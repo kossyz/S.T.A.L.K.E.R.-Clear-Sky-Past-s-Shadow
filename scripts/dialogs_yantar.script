@@ -1,0 +1,5 @@
+function give_pda(first_speaker, second_speaker)
+	if db.actor:object("device_pda_digger") ~= nil then
+		dialogs.relocate_item_section_from_actor(first_speaker, second_speaker, "device_pda_digger")
+	end
+end

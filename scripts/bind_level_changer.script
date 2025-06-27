@@ -1,0 +1,81 @@
+function bind(obj)
+	obj:bind_object(lchanger_binder(obj))
+end
+
+--------------------------------------------------------------------------------
+
+class "lchanger_binder" (object_binder)
+
+function lchanger_binder:__init(obj) super(obj)
+	self.disabled_for_surge = false
+	self.st = {}
+end
+
+function lchanger_binder:reload(section)
+	object_binder.reload(self, section)
+end
+
+function lchanger_binder:reinit()
+	object_binder.reinit(self)
+	db.storage[self.object:id()] = self.st
+end
+
+function lchanger_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
+		return false
+	end
+	local obj = self.object
+	local se_obj = _G.sim:object(se_abstract.id)
+	db.add_obj(obj)
+	self.st.s_obj = se_obj
+	obj:enable_level_changer(se_obj.enabled)
+	obj:set_level_changer_invitation(se_obj.hint)
+	return true
+end
+
+function lchanger_binder:net_destroy()
+	db.del_obj(self.object)
+	object_binder.net_destroy(self)
+end
+
+local object_binder_update = object_binder.update
+
+function lchanger_binder:update(delta)
+	object_binder_update(self, delta)
+	if xr_surge_hide.start_surge or xr_surge_hide.surge_activated then
+		local obj = self.object
+		if obj:is_level_changer_enabled() then
+			obj:enable_level_changer(false)
+			obj:set_level_changer_invitation("tips_wait_emission_finish")
+			self.disabled_for_surge = true
+		end
+	else
+		if self.disabled_for_surge then
+			local obj = self.object
+			local se_obj = self.st.s_obj
+			obj:enable_level_changer(se_obj.enabled)
+			obj:set_level_changer_invitation(se_obj.hint)
+			self.disabled_for_surge = false
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function lchanger_binder:net_save_relevant()
+	return true
+end
+
+function lchanger_binder:save(package)
+	set_save_marker(package, "save", false, "lchanger_binder")
+	object_binder.save(self, package)
+	xr_logic.save_obj(self.object, package)
+	set_save_marker(package, "save", true, "lchanger_binder")
+end
+
+function lchanger_binder:load(reader)
+	set_save_marker(reader, "load", false, "lchanger_binder")
+	object_binder.load(self, reader)
+	xr_logic.load_obj(self.object, reader)
+	set_save_marker(reader, "load", true, "lchanger_binder")
+end

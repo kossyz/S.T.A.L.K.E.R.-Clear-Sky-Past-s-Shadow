@@ -1,0 +1,67 @@
+zone_by_name           = {}
+bridge_by_name         = {}
+script_ids             = {}
+storage                = {}
+actor                  = nil
+heli_enemies           = {}
+heli_enemy_count       = 0
+anim_obj_by_name       = {}
+goodwill               = {sympathy = {}, relations = {}}
+signal_light           = {}
+
+function add_enemy(obj)
+	heli_enemies[heli_enemy_count] = obj
+	heli_enemy_count = heli_enemy_count + 1
+end
+
+function delete_enemy(e_index)
+	heli_enemies[e_index] = nil
+end
+
+function add_obj(obj)
+	storage[obj:id()].object = obj
+end
+
+function del_obj(obj)
+	storage[obj:id()] = nil
+end
+
+function add_zone(zone)
+	zone_by_name[zone:name()] = zone
+	add_obj(zone)
+end
+
+function del_zone(zone)
+	del_obj(zone)
+	zone_by_name[zone:name()] = nil
+end
+
+function add_bridge(bridge, binder)
+	bridge_by_name[bridge:name()] = binder
+	add_obj(bridge)
+end
+
+function del_bridge(bridge)
+	del_obj(bridge)
+	bridge_by_name[bridge:name()] = nil
+end
+
+function add_actor(obj)
+	actor = obj
+	add_obj(obj)
+end
+
+function del_actor()
+	del_obj(actor)
+	actor = nil
+end
+
+function add_anim_obj(anim_obj, binder)
+	anim_obj_by_name[anim_obj:name()] = binder
+	add_obj(anim_obj)
+end
+
+function del_anim_obj(anim_obj)
+	del_obj(anim_obj)
+	anim_obj_by_name[anim_obj:name()] = nil
+end

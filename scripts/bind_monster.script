@@ -1,0 +1,246 @@
+function bind(npc) -- called 1st
+	npc:bind_object(generic_object_binder(npc))
+end
+
+--------------------------------------------------------------------------------
+
+class "generic_object_binder" (object_binder)
+
+function generic_object_binder:__init(npc) super(npc) -- called 2nd
+	self.loaded = false
+	self.first_update_done = false
+	self.death_recorded = false
+	self.is_trader = npc:clsid() == clsid.script_trader
+	self.st = {}
+end
+
+function generic_object_binder:reload(section) -- called 3rd
+	object_binder.reload(self, section)
+end
+
+function generic_object_binder:reinit() -- called 4th
+	object_binder.reinit(self)
+	db.storage[self.object:id()] = self.st
+end
+
+function generic_object_binder:net_spawn(se_abstract) -- called 5th
+
+	if not object_binder.net_spawn(self, se_abstract) then
+		return false
+	end
+
+	if not self.object:alive() then
+		return true
+	end
+
+	if db.actor then
+		self:finish_net_spawn() -- DC20230306
+	else
+		bind_stalker.defer_net_spawn(self)
+	end
+
+	return true
+end
+
+function generic_object_binder:finish_net_spawn()
+
+	local npc = self.object
+	local se_npc = _G.sim:object(npc:id())
+	local npc_st = self.st
+
+	npc_st.squad_obj = sim_board.get_sim_board().squads[se_npc.squad_id]
+
+	db.add_obj(npc)
+
+	if not self.is_trader then
+		npc:set_patrol_extrapolate_callback(generic_object_binder.extrapolate_callback, self)
+	end
+
+	npc:set_callback(callback.patrol_path_in_point, self.waypoint_callback, self)
+	npc:set_callback(callback.hit, self.hit_callback, self)
+	npc:set_callback(callback.death, self.death_callback, self)
+
+	if self.is_trader then
+		smart_terrain.setup_gulag_and_logic_on_spawn(npc, npc_st, se_npc, modules.stype_trader, self.loaded)
+	else
+		smart_terrain.setup_gulag_and_logic_on_spawn(npc, npc_st, se_npc, modules.stype_mobile, self.loaded)
+	end
+end
+
+function generic_object_binder:net_destroy()
+
+	self:clear_callbacks()
+
+	local npc = self.object
+	local npc_st = self.st
+
+	xr_sound.stop_sounds_by_id(npc:id())
+
+	if npc_st.active_scheme then
+		xr_logic.issue_event(nil, npc_st[npc_st.active_scheme], "net_destroy")
+	end
+
+	db.del_obj(npc)
+
+	object_binder.net_destroy(self)
+end
+
+local object_binder_update = object_binder.update
+
+function generic_object_binder:update(delta) -- called 6th
+
+	object_binder_update(self, delta)
+
+	if self.death_recorded then
+		return
+	end
+
+	local npc = self.object
+
+	if not self.first_update_done then
+		if self.loaded then
+			local npc_id = npc:id()
+			if bind_stalker.delayed_alife_release_objects[npc_id] == true then
+				local sim = _G.sim
+				sim:release(sim:object(npc_id), true)
+				bind_stalker.delayed_alife_release_objects[npc_id] = nil
+				return
+			end
+		end
+		if self.is_trader and npc:alive() then
+			trade_manager.update(npc)
+		end
+		self.first_update_done = true
+	end
+
+	if npc:alive() then
+
+		local npc_st = self.st
+
+		if npc_st.active_scheme then
+			xr_logic.try_switch_to_another_section(npc, npc_st[npc_st.active_scheme], db.actor)
+		end
+
+		local squad = npc_st.squad_obj
+
+		if squad and squad.commander_id == npc:id() then
+			squad:update()
+		end
+
+		if npc_st.active_scheme then
+			xr_logic.issue_event(nil, npc_st[npc_st.active_scheme], "update", delta)
+		end
+	else
+		xr_logic.mob_release(npc)
+		self.death_recorded = true
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function generic_object_binder:clear_callbacks()
+	local npc = self.object
+	npc:set_patrol_extrapolate_callback(nil)
+	npc:set_callback(callback.patrol_path_in_point, nil)
+	npc:set_callback(callback.hit, nil)
+	npc:set_callback(callback.death, nil)
+end
+
+function generic_object_binder:extrapolate_callback(current_point_index)
+
+	local npc = self.object
+
+	if not npc:get_script() then
+		return false
+	end
+
+	local patrol_path = npc:patrol()
+
+	if not level.patrol_path_exists(patrol_path) then
+		return false
+	end
+
+	return patrol(patrol_path):flags(current_point_index):get() == 0
+end
+
+function generic_object_binder:waypoint_callback(npc, action_type, index)
+	local npc_st = self.st
+	if npc_st.active_scheme then
+		xr_logic.issue_event(nil, npc_st[npc_st.active_scheme], "waypoint_callback", npc, action_type, index)
+	end
+end
+
+function generic_object_binder:hit_callback(victim, amount, local_direction, hitter, bone_index)
+
+	local npc_st_hit = self.st.hit
+
+	if npc_st_hit then
+		xr_logic.issue_event(nil, npc_st_hit, "hit_callback", victim, amount, local_direction, hitter, bone_index)
+	end
+
+	if amount > 0 and hitter:id() == 0 then -- 0 = actor ID
+		sim_combat.hit_callback(victim:id())
+	end
+end
+
+function generic_object_binder:death_callback(victim, culprit)
+
+	self:clear_callbacks()
+
+	if culprit:id() == 0 then -- 0 = actor ID
+		xr_statistic.addKillCount(victim)
+		xr_statistic.inc_killed_monsters_counter()
+	end
+
+	local npc_st = self.st
+
+	if npc_st.mob_death then
+		xr_logic.issue_event(nil, npc_st.mob_death, "death_callback", victim, culprit)
+	end
+--[[
+	The if-statement below is superfluous in vanilla as there are no schemes in vanilla that:
+
+	(i) have a death_callback
+	(ii) apply to entities that have bind_monster as their object binder (traders and mutants)
+
+	Mob_death is an exception but anyway gets its own explicit death_callback call above.
+	Despite the superfluity, we leave the if-statement uncommented, as otherwise modders who
+	add such a scheme to the game would need to remember to uncomment the statement below.
+	Without doing so, their scheme's death_callback would not fire.
+]]
+	if npc_st.active_scheme then
+		xr_logic.issue_event(nil, npc_st[npc_st.active_scheme], "death_callback", victim, culprit)
+	end
+--[[
+	-- This could fire before se_monster:on_death() does and calls on_npc_death().
+	-- In that case, the death of a squad poltergeist would not be processed correctly.
+
+	if victim:clsid() == clsid.poltergeist_s then
+		local se_npc = _G.sim:object(victim:name())
+		if se_npc ~= nil then
+			_G.sim:release(se_npc, true)
+		end
+	end
+]]
+end
+
+--------------------------------------------------------------------------------
+
+function generic_object_binder:net_save_relevant()
+	return true
+end
+
+function generic_object_binder:save(packet)
+	set_save_marker(packet, "save", false, "generic_object_binder")
+	object_binder.save(self, packet)
+	xr_logic.save_obj(self.object, packet)
+	set_save_marker(packet, "save", true, "generic_object_binder")
+end
+
+function generic_object_binder:load(reader) -- called 4.5th (only on load)
+	set_save_marker(reader, "load", false, "generic_object_binder")
+	object_binder.load(self, reader)
+	xr_logic.load_obj(self.object, reader)
+	set_save_marker(reader, "load", true, "generic_object_binder")
+	self.loaded = true
+end

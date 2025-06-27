@@ -1,0 +1,589 @@
+local said_phrases = {}
+local disabled_phrases = {} -- phrases disabled for a game session
+local disabled_phrases_temp = {} -- phrases disabled for a conversation
+local id_counter = 1 -- start from 1 because of adding root phrases
+
+phrase_table   = {hello = {}, information = {}, occupation = {}, place = {}}
+priority_table = {hello = {}, information = {}, occupation = {}, place = {}}
+
+local function get_id()
+	id_counter = id_counter + 1
+	return tostring(id_counter)
+end
+
+function fill_phrase_table()
+	local dm_ini_file = ini_file("misc\\dialog_manager.ltx")
+	for i = 0, dm_ini_file:line_count("list") - 1 do
+		local result, name = dm_ini_file:r_line("list", i, "", "")
+		local category = ""
+		if dm_ini_file:line_exist(name, "category") then
+			category = dm_ini_file:r_string(name, "category")
+			if category == "intro" then
+				category = "hello"
+			elseif category == "cool" then
+				category = "information"
+			elseif category == "action" then
+				category = "occupation"
+			elseif category == "about" then
+				category = "place"
+			else
+				abort("[dialog_manager.fill_phrase_table]: Invalid 'category' field value '%s' in section [%s] of misc\\dialog_manager.ltx.", category, name)
+			end
+		else
+			abort("[dialog_manager.fill_phrase_table]: Missing 'category' field value in section [%s] of misc\\dialog_manager.ltx.", name)
+		end
+		if not dm_ini_file:line_exist(name, "npc_community") then
+			abort("[dialog_manager.fill_phrase_table]: Missing 'npc_community' field value in section [%s] of misc\\dialog_manager.ltx.", name)
+		end
+		if not dm_ini_file:line_exist(name, "level") then
+			abort("[dialog_manager.fill_phrase_table]: Missing 'level' field value in section [%s] of misc\\dialog_manager.ltx.", name)
+		end
+		local npc_community = dm_ini_file:r_string(name, "npc_community")
+		local level = dm_ini_file:r_string(name, "level")
+		local actor_community = dm_ini_file:line_exist(name, "actor_community") and dm_ini_file:r_string(name, "actor_community") or "all"
+		phrase_table[category][get_id()] =
+		{
+			name            = name,
+			npc_community   = npc_community == "all" and "all" or parse_names_to_hash(npc_community),
+			level           = level == "all" and "all" or parse_names_to_hash(level),
+			actor_community = actor_community == "all" and "all" or parse_names_to_hash(actor_community),
+			wounded         = dm_ini_file:line_exist(name, "wounded") and dm_ini_file:r_string(name, "wounded") or "false",
+			once            = dm_ini_file:line_exist(name, "once") and dm_ini_file:r_string(name, "once") or "always",
+		}
+	end
+end
+
+local function init_start_dialogs(dialog)
+
+	local phrase = dialog:AddPhrase("", "0", "", -10000)
+	      phrase = dialog:AddPhrase("", "1", "0", -10000)
+	local script = phrase:GetPhraseScript()
+	script:AddAction("dialog_manager.fill_priority_hello_table")
+	local ph = false
+
+	for phrase_id, phrase_data in pairs (phrase_table.hello) do
+		ph = true
+		phrase = dialog:AddPhrase(phrase_data.name, phrase_id, "1", -10000)
+		script = phrase:GetPhraseScript()
+		script:AddPrecondition("dialog_manager.precondition_hello_dialogs")
+		script:AddPrecondition("dialog_manager.precondition_not_sim_action_dialog")
+		script:AddAction("dialog_manager.action_hello_dialogs")
+		script:AddAction("dialog_manager.action_sim_action_dialog")
+		if phrase_data.wounded == "true" then
+			script:AddPrecondition("dialogs.is_wounded")
+			-- local bandage_id = get_id()
+			local medkit_id = get_id()
+			local sorry_id = get_id()
+			local thanks_id = get_id()
+			-- phrase = dialog:AddPhrase("dm_wounded_bandage", bandage_id, phrase_id, -10000)
+			-- script = phrase:GetPhraseScript()
+			-- script:AddPrecondition("dialogs.actor_have_bandage")
+			-- script:AddAction("dialogs.transfer_bandage")
+			-- script:AddAction("dialogs.break_dialog")
+			-- phrase = dialog:AddPhrase("dm_wounded_thanks", thanks_id, bandage_id, -10000)
+			phrase = dialog:AddPhrase("dm_wounded_medkit", medkit_id, phrase_id, -10000)
+			script = phrase:GetPhraseScript()
+			script:AddPrecondition("dialogs.actor_have_medkit")
+			script:AddAction("dialogs.transfer_medkit")
+			script:AddAction("dialogs.break_dialog")
+			phrase = dialog:AddPhrase("dm_wounded_thanks", thanks_id, medkit_id, -10000)
+			phrase = dialog:AddPhrase("dm_wounded_sorry", sorry_id, phrase_id, -10000)
+			script = phrase:GetPhraseScript()
+			script:AddAction("dialogs.break_dialog")
+		else
+			script:AddPrecondition("dialogs.is_not_wounded")
+		end
+	end
+
+	phrase = dialog:AddPhrase("dm_sim_action_attack_point_none", get_id(), "1", -10000)
+	script = phrase:GetPhraseScript()
+	script:AddPrecondition("dialog_manager.precondition_sim_action_dialog")
+	script:AddPrecondition("dialog_manager.precondition_sim_action_attack_point_none")
+	script:AddAction("dialog_manager.action_sim_action_dialog")
+
+	phrase = dialog:AddPhrase("dm_sim_action_attack_point_friend", get_id(), "1", -10000)
+	script = phrase:GetPhraseScript()
+	script:AddPrecondition("dialog_manager.precondition_sim_action_dialog")
+	script:AddPrecondition("dialog_manager.precondition_sim_action_attack_point_friend")
+	script:AddAction("dialog_manager.action_sim_action_dialog")
+
+	phrase = dialog:AddPhrase("dm_sim_action_attack_point_enemy", get_id(), "1", -10000)
+	script = phrase:GetPhraseScript()
+	script:AddPrecondition("dialog_manager.precondition_sim_action_dialog")
+	script:AddPrecondition("dialog_manager.precondition_sim_action_attack_point_enemy")
+	script:AddAction("dialog_manager.action_sim_action_dialog")
+
+	phrase = dialog:AddPhrase("dm_sim_action_stay_point_none_near", get_id(), "1", -10000)
+	script = phrase:GetPhraseScript()
+	script:AddPrecondition("dialog_manager.precondition_sim_action_dialog")
+	script:AddPrecondition("dialog_manager.precondition_sim_action_stay_point_none_near")
+	script:AddAction("dialog_manager.action_sim_action_dialog")
+
+	phrase = dialog:AddPhrase("dm_sim_action_stay_point_enemy_near", get_id(), "1", -10000)
+	script = phrase:GetPhraseScript()
+	script:AddPrecondition("dialog_manager.precondition_sim_action_dialog")
+	script:AddPrecondition("dialog_manager.precondition_sim_action_stay_point_enemy_near")
+	script:AddAction("dialog_manager.action_sim_action_dialog")
+
+	if not ph then
+		phrase = dialog:AddPhrase("dm_hello_general", get_id(), "1", -10000)
+	end
+end
+
+local function init_actor_dialogs(dialog, category)
+	local sformat = string.format
+	local phrase = dialog:AddPhrase(sformat("dm_%s_general", category), "0", "", -10000)
+	local script = phrase:GetPhraseScript()
+	-- script:AddPrecondition("dialog_manager.precondition_is_phrase_disabled")
+	script:AddAction(sformat("dialog_manager.fill_priority_%s_table", category))
+	script:AddAction("dialog_manager.action_disable_phrase")
+	local answer = dialog:AddPhrase(sformat("dm_%s_no_more", category), "1", "0", -10000)
+	script = answer:GetPhraseScript()
+	script:AddPrecondition(sformat("dialog_manager.precondition_%s_dialogs_no_more", category))
+	for phrase_id, phrase_data in pairs (phrase_table[category]) do
+		phrase = dialog:AddPhrase(phrase_data.name, phrase_id, "0", -10000)
+		script = phrase:GetPhraseScript()
+		script:AddPrecondition(sformat("dialog_manager.precondition_%s_dialogs", category))
+		script:AddAction(sformat("dialog_manager.action_%s_dialogs", category))
+	end
+end
+
+--[[
+                                    van     srp     srp possible totals
+
+actor_community     <unmatched>     +0      = -6    = -6
+actor_community     nil/all         +1      +1      = 0
+actor_community     <mine>          +2      +2      = 1
+
+community           <unmatched>     -1      = -4    = -4
+community           all             +1      +1      = -5|1|2
+community           <npc's>         +2      +2      = -4|2|3
+
+level               <unmatched>     -1      = -4    = -4
+level               all             +1      +1      = -4|-3|2|3|4
+level               <npc's>         +2      +2      = -3|-2|3|4|5
+
+wounded phrase + wounded            +1      +1      = -3|-2|-1|3|4|5|6
+wounded phrase + not-wounded        = -1    = -4    = -4
+not-wounded phrase + wounded        = -1    = -4    = -4
+not-wounded phrase + not-wounded    +1      +1      = -3|-2|-1|3|4|5|6
+
+phrase said + once-phrase                   = 0     = 0
+phrase said + not once-phrase               = 1     = 1
+not phrase said                             +0      = -4|-3|-2|-1|3|4|5|6
+
+INACTIVE:
+
+once-phrase + ignore once-phrases  = -1    = -1    = -1
+once-phrase + priority 255         = 255   = 255   = 255
+not once-phrase                    +0      +0      = -4|-3|-2|-1|0|1|3|4|5|6
+
+]]
+
+local function calculate_priority(phrase_data, phrase_id, npc_com, act_com, is_wounded)
+	local priority = -1
+	if phrase_data.actor_community == "all" then
+		priority = priority + 1
+	elseif phrase_data.actor_community[act_com] then
+		priority = priority + 2
+	else
+		priority = -6
+	end
+	if phrase_data.npc_community == "all" then
+		priority = priority + 1
+	elseif phrase_data.npc_community[npc_com] then
+		priority = priority + 2
+	else
+		priority = -4
+	end
+	if phrase_data.level == "all" then
+		priority = priority + 1
+	elseif phrase_data.level[level.name()] then
+		priority = priority + 2
+	else
+		priority = -4
+	end
+	if phrase_data.wounded == "true" then
+		if is_wounded then
+			priority = priority + 1
+		else
+			priority = -4
+		end
+	else
+		if is_wounded then
+			priority = -4
+		else
+			priority = priority + 1
+		end
+	end
+	if said_phrases[npc_com][phrase_id] then
+		if phrase_data.once == "true" then
+			priority = 0
+		else
+			priority = 1
+		end
+	end
+--[[
+	if phrase_data.once == "true" then
+		local npc_id = npc:id()
+		if PRT_subtable[npc_id].ignore_once then
+			priority = -1 -- makes this phrase not get said again by this NPC
+		end
+		if PRT_subtable[npc_id][phrase_id] == 255 then
+			priority = 255 -- makes this phrase repeat
+		end
+	end
+]]
+	return priority
+end
+
+local function fill_priority_table(npc, PT_subtable, PRT_subtable)
+	local npc_id = npc:id()
+	if PRT_subtable[npc_id] == nil then
+		PRT_subtable[npc_id] = {}
+	end
+	local npc_com = npc:character_community()
+	if not said_phrases[npc_com] then
+		said_phrases[npc_com] = {}
+	end
+	local act_com = db.actor:character_community()
+	local is_wounded = xr_wounded.is_heavy_wounded_by_id(npc_id)
+	for phrase_id, phrase_data in pairs (PT_subtable) do
+		PRT_subtable[npc_id][phrase_id] = calculate_priority(phrase_data, phrase_id, npc_com, act_com, is_wounded)
+--		dbglog("[NPC %s][Phrase Name: %s][Priority: %d]: '%s'", npc:name(), phrase_data.name, PRT_subtable[npc_id][phrase_id], game.translate_string(phrase_data.name))
+	end
+end
+--[[
+local function action(PT_subtable, PRT_subtable, phrase_id, npc)
+	local npc_id = npc:id()
+	if not PRT_subtable[npc_id].ignore_once then
+		if PT_subtable[phrase_id].once == "true" then
+			PRT_subtable[npc_id][phrase_id] = 255
+		end
+		PRT_subtable[npc_id].ignore_once = -100 -- not 'true' so can do arithmetic
+	end
+	said_phrases[npc:character_community()][phrase_id] = true
+end
+]]
+local function is_highest_priority_phrase(npc_prior_table, phrase_id)
+	local priority = npc_prior_table[phrase_id]
+	for phr_id, phr_prior in pairs (npc_prior_table) do
+		if phr_prior > priority then
+			return false
+		end
+	end
+	return true
+end
+
+local function get_highest_phrase_priority(PRT_subtable, npc)
+	local pr = -1
+	for phr_id, phr_prior in pairs (PRT_subtable[npc:id()]) do
+		if phr_prior > pr then
+			pr = phr_prior
+		end
+	end
+	return pr
+end
+
+--------------------------------------------------------------------------------
+-- Initializing, filling priority tables, setting preconditions and actions
+--------------------------------------------------------------------------------
+
+function init_hello_dialogs(dialog)
+	init_start_dialogs(dialog)
+end
+
+function init_information_dialogs(dialog)
+	init_actor_dialogs(dialog, "information")
+end
+
+function init_occupation_dialogs(dialog)
+	init_actor_dialogs(dialog, "occupation")
+end
+
+function init_place_dialogs(dialog)
+	init_actor_dialogs(dialog, "place")
+end
+
+--------------------------------------------------------------------------------
+
+-- action function signature(actor, npc, dialog_name, id)
+
+function fill_priority_hello_table(actor, npc)
+	fill_priority_table(npc, phrase_table.hello, priority_table.hello)
+end
+
+function fill_priority_information_table(actor, npc)
+	fill_priority_table(npc, phrase_table.information, priority_table.information)
+end
+
+function fill_priority_occupation_table(actor, npc)
+	fill_priority_table(npc, phrase_table.occupation, priority_table.occupation)
+end
+
+function fill_priority_place_table(actor, npc)
+	fill_priority_table(npc, phrase_table.place, priority_table.place)
+end
+
+--------------------------------------------------------------------------------
+
+function precondition_hello_dialogs(npc, actor, dialog_name, parent_id, id)
+	return is_highest_priority_phrase(priority_table.hello[npc:id()], id)
+end
+
+function precondition_information_dialogs(npc, actor, dialog_name, parent_id, id)
+	return is_highest_priority_phrase(priority_table.information[npc:id()], id)
+end
+
+function precondition_information_dialogs_no_more(npc)
+	return get_highest_phrase_priority(priority_table.information, npc) == -1
+end
+
+function precondition_occupation_dialogs(npc, actor, dialog_name, parent_id, id)
+	return is_highest_priority_phrase(priority_table.occupation[npc:id()], id)
+end
+
+function precondition_occupation_dialogs_no_more(npc)
+	return get_highest_phrase_priority(priority_table.occupation, npc) == -1
+end
+
+function precondition_place_dialogs(npc, actor, dialog_name, parent_id, id)
+	return is_highest_priority_phrase(priority_table.place[npc:id()], id)
+end
+
+function precondition_place_dialogs_no_more(npc)
+	return get_highest_phrase_priority(priority_table.place, npc) == -1
+end
+
+--------------------------------------------------------------------------------
+
+function action_hello_dialogs(npc, actor, dialog_name, id)
+--	action(phrase_table.hello, priority_table.hello, id, npc)
+	said_phrases[npc:character_community()][id] = true
+end
+
+function action_information_dialogs(npc, actor, dialog_name, id)
+--	action(phrase_table.information, priority_table.information, id, npc)
+	said_phrases[npc:character_community()][id] = true
+end
+
+function action_occupation_dialogs(npc, actor, dialog_name, id)
+--	action(phrase_table.occupation, priority_table.occupation, id, npc)
+	said_phrases[npc:character_community()][id] = true
+end
+
+function action_place_dialogs(npc, actor, dialog_name, id)
+--	action(phrase_table.place, priority_table.place, id, npc)
+	said_phrases[npc:character_community()][id] = true
+end
+
+--------------------------------------------------------------------------------
+
+local rnd = 0
+
+function action_sim_action_dialog()
+	rnd = 0
+end
+
+function precondition_sim_action_dialog(npc)
+	if xr_wounded.is_heavy_wounded_by_id(npc:id()) then
+		return false
+	end
+	local squad = db.storage[npc:id()].squad_obj
+	if squad == nil or squad.current_action == nil then
+		return false
+	end
+	if squad.current_action.name == "stay_point" then
+		if rnd == 0 then
+			rnd = math.random(1, 12)
+		end
+		if rnd <= 11 then -- 11/12 chance
+			return false
+		end
+	end
+	return true
+end
+
+function precondition_not_sim_action_dialog(npc)
+	return not precondition_sim_action_dialog(npc)
+end
+
+function precondition_sim_action_attack_point_none(npc)
+	local squad = db.storage[npc:id()].squad_obj
+	if squad.current_action.name == "attack_point" then
+		local smart = squad.board.smarts[squad.current_action.dest_smrt_id].smrt
+		return smart.player_name == "none"
+	end
+	return false
+end
+
+function precondition_sim_action_attack_point_friend(npc)
+	local squad = db.storage[npc:id()].squad_obj
+	if squad.current_action.name == "attack_point" then
+		local smart = squad.board.smarts[squad.current_action.dest_smrt_id].smrt
+		return smart.player_name == squad.player_id
+--		return smart.player_name ~= "none" and not game_relations.is_factions_enemies(squad.player_id, smart.player_name)
+	end
+	return false
+end
+
+function precondition_sim_action_attack_point_enemy(npc)
+	local squad = db.storage[npc:id()].squad_obj
+	if squad.current_action.name == "attack_point" then
+		local smart = squad.board.smarts[squad.current_action.dest_smrt_id].smrt
+		local smart_faction = smart.player_name
+		return smart_faction ~= "none" and smart_faction ~= squad.player_id
+--		return game_relations.is_factions_enemies(squad.player_id, smart.player_name)
+	end
+	return false
+end
+
+function precondition_sim_action_stay_point_none_near(npc)
+	local squad = db.storage[npc:id()].squad_obj
+	if squad.current_action.name ~= "attack_point" then
+		local smart = squad.board.smarts[squad.smart_id]
+		for k, neighbor_smart in pairs (smart.targets) do
+--			if neighbor_smart.player_name ~= "none" then
+			if game_relations.is_factions_enemies(squad.player_id, neighbor_smart.player_name) then
+				return false
+			end
+		end
+		return true
+	end
+	return false
+end
+
+function precondition_sim_action_stay_point_enemy_near(npc)
+	local squad = db.storage[npc:id()].squad_obj
+	if squad.current_action.name ~= "attack_point" then
+		local smart = squad.board.smarts[squad.smart_id]
+		for k, neighbor_smart in pairs (smart.targets) do
+--			if neighbor_smart.player_name ~= "none" then
+			if game_relations.is_factions_enemies(squad.player_id, neighbor_smart.player_name) then
+				return true
+			end
+		end
+		return false
+	end
+	return false
+end
+
+function precondition_is_phrase_disabled(fs, ss, dn, ppi, pi)
+	if pi == "" then
+		pi = dn
+	else
+		pi = dn..pi
+	end
+	local npc = dialogs.who_is_npc(fs, ss)
+	local npc_id = npc:id()
+	local disabled_npc_phrases = disabled_phrases[npc_id]
+	local disabled_npc_phrases_temp = disabled_phrases_temp[npc_id]
+	return (disabled_npc_phrases == nil or disabled_npc_phrases[pi] == nil)
+	and (disabled_npc_phrases_temp == nil or disabled_npc_phrases_temp[pi] == nil)
+end
+
+local function disable_phrase(fs, ss, dn, pi, t)
+	if pi == "0" then
+		pi = dn
+	else
+		pi = dn..pi -- not safe to disable individual phrase IDs without this
+	end
+	local npc = dialogs.who_is_npc(fs, ss)
+	local npc_id = npc:id()
+	local npc_disabled_phrases = t[npc_id]
+	if npc_disabled_phrases == nil then
+		npc_disabled_phrases = {}
+		t[npc_id] = npc_disabled_phrases
+	end
+	npc_disabled_phrases[pi] = true
+end
+
+function action_disable_phrase(fs, ss, dn, pi)
+	disable_phrase(fs, ss, dn, pi, disabled_phrases)
+end
+
+function action_disable_phrase_temp(fs, ss, dn, pi)
+	disable_phrase(fs, ss, dn, pi, disabled_phrases_temp)
+end
+
+function restore_certain_disabled_phrases(npc)
+	disabled_phrases_temp[npc:id()] = nil
+end
+
+function restore_disabled_guide_phrase(npc)
+	local disabled_npc_phrases_temp = disabled_phrases_temp[npc:id()]
+	if disabled_npc_phrases_temp ~= nil then
+		disabled_npc_phrases_temp["guiders_dialog"] = nil
+	end
+end
+
+function restore_disabled_task_phrase(npc)
+	local disabled_npc_phrases_temp = disabled_phrases_temp[npc:id()]
+	if disabled_npc_phrases_temp ~= nil then
+		disabled_npc_phrases_temp["tm_random_task"] = nil
+	end
+end
+
+function restore_disabled_treasure_phrase(npc)
+	local disabled_npc_phrases_temp = disabled_phrases_temp[npc:id()]
+	if disabled_npc_phrases_temp ~= nil then
+		disabled_npc_phrases_temp["treasure_dialog"] = nil
+	end
+end
+
+function create_bye_phrase()
+	if rnd == 0 then
+		rnd = math.random(1, 12)
+	end
+	if rnd > 8 then
+		return game.translate_string("actor_break_dialog_1")
+	elseif rnd > 4 then
+		return game.translate_string("actor_break_dialog_2")
+	else
+		return game.translate_string("actor_break_dialog_3")
+	end
+end
+
+function news_dialog_precondition(fs, ss)
+	local disabled_npc_phrases = disabled_phrases[ss:id()]
+	return disabled_npc_phrases ~= nil
+	and disabled_npc_phrases["dm_information_dialog"] ~= nil
+	and disabled_npc_phrases["dm_occupation_dialog"] ~= nil
+	and disabled_npc_phrases["dm_place_dialog"] ~= nil
+end
+
+function create_question_phrase()
+	if rnd == 0 then
+		rnd = math.random(1, 12)
+	end
+	if rnd > 8 then
+		return game.translate_string("dm_actor_news_1")
+	elseif rnd > 4 then
+		return game.translate_string("dm_actor_news_2")
+	else
+		return game.translate_string("dm_actor_news_3")
+	end
+end
+
+function create_answer_phrase(fs)
+
+	local community = fs:character_community()
+
+	if community ~= "bandit" and community ~= "army" and community ~= "dolg" and community ~= "freedom" and community ~= "csky" then
+		community = "default"
+	end
+
+	if rnd == 0 then
+		rnd = math.random(1, 12)
+	end
+
+	if rnd > 9 then
+		return game.translate_string("dm_"..community.."_no_news_1")
+	elseif rnd > 6 then
+		return game.translate_string("dm_"..community.."_no_news_2")
+	elseif rnd > 3 then
+		return game.translate_string("dm_"..community.."_no_news_3")
+	else
+		return game.translate_string("dm_"..community.."_no_news_4")
+	end
+end

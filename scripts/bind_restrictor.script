@@ -1,0 +1,124 @@
+function bind(obj) -- called 1st
+	obj:bind_object(restrictor_binder(obj))
+end
+
+--------------------------------------------------------------------------------
+
+class "restrictor_binder" (object_binder)
+
+function restrictor_binder:__init(obj) super(obj) -- called 2nd
+	self.initialized = false
+	self.loaded = false
+	self.st = {}
+end
+
+function restrictor_binder:reload(section) -- called 3rd
+	object_binder.reload(self, section)
+end
+
+function restrictor_binder:reinit() -- called 4th
+	object_binder.reinit(self)
+	db.storage[self.object:id()] = self.st
+end
+
+function restrictor_binder:net_spawn(se_abstract) -- called 5th
+
+	if not object_binder.net_spawn(self, se_abstract) then
+		return false
+	end
+
+	local obj = self.object
+	local obj_id = se_abstract.id
+
+	db.add_zone(obj)
+
+	if xr_sound.looped_sound[obj_id] then
+		for k in pairs (xr_sound.looped_sound[obj_id]) do
+			xr_sound.play_sound_looped(obj_id, k)
+		end
+	end
+
+	local ini = obj:spawn_ini()
+
+	if not ini then
+		return true
+	end
+
+	if ini:section_exist("information_sector") then
+		sr_danger.register_new_sector(obj)
+	end
+
+	if ini:section_exist("apply_on_combat") then
+		combat_restrictor.register_combat_restrictor(obj)
+	end
+
+	if ini:line_exist("logic", "active") then
+		local section = ini:r_string("logic", "active")
+		if section ~= nil then
+			local scheme = string.gsub(section, "[%d@].*", "") -- utils.get_scheme_by_section(section)
+			if scheme == "sr_bloodsucker" or scheme == "sr_monster" then
+				xr_motivator.register_bloodsucker_restr(obj)
+			end
+		end
+	end
+
+	return true
+end
+
+function restrictor_binder:net_destroy()
+
+	local obj = self.object
+	local obj_st = self.st
+
+	xr_sound.stop_sounds_by_id(obj:id())
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "net_destroy")
+	end
+
+	db.del_zone(obj)
+
+	object_binder.net_destroy(self)
+end
+
+function restrictor_binder:update(delta) -- called 6th
+
+	local obj_st = self.st
+
+	if not self.initialized then
+		self.initialized = true
+		xr_logic.initialize_obj(self.object, obj_st, self.loaded, modules.stype_restrictor)
+	end
+
+	-- DC20231015: Per https://github.com/Decane/SRP/issues/154, the xr_sound update must precede
+	-- the active scheme update to prevent time windows wherein the game can be saved in a state
+	-- where a sound_end/theme_end signal has been registered in scheme storage but not yet
+	-- processed to trigger a section switch (which would only happen on the subsequent update).
+
+	xr_sound.update(self.object:id())
+
+	if obj_st.active_scheme then
+		xr_logic.issue_event(nil, obj_st[obj_st.active_scheme], "update", delta)
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function restrictor_binder:net_save_relevant()
+	return true
+end
+
+function restrictor_binder:save(packet)
+	set_save_marker(packet, "save", false, "restrictor_binder")
+	object_binder.save(self, packet)
+	xr_logic.save_obj(self.object, packet)
+	set_save_marker(packet, "save", true, "restrictor_binder")
+end
+
+function restrictor_binder:load(reader) -- called 4.5th (only on load)
+	set_save_marker(reader, "load", false, "restrictor_binder")
+	object_binder.load(self, reader)
+	xr_logic.load_obj(self.object, reader)
+	set_save_marker(reader, "load", true, "restrictor_binder")
+	self.loaded = true
+end

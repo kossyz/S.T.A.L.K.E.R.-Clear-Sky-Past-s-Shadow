@@ -1,0 +1,94 @@
+crow_storage = {}
+crow_counter = 0
+
+function bind(obj)
+	obj:bind_object(crow_binder(obj))
+end
+
+--------------------------------------------------------------------------------
+
+class "crow_binder" (object_binder)
+
+function crow_binder:__init(obj) super(obj)
+	self.death_time = nil
+end
+
+function crow_binder:reload(section)
+	object_binder.reload(self, section)
+end
+
+function crow_binder:reinit()
+	object_binder.reinit(self)
+	db.storage[self.object:id()] = {}
+end
+
+function crow_binder:net_spawn(se_abstract)
+	if not object_binder.net_spawn(self, se_abstract) then
+		return false
+	end
+	local obj = self.object
+	if obj:alive() then
+		db.add_obj(obj)
+		crow_storage[obj:id()] = obj
+		crow_counter = crow_counter + 1
+		obj:set_callback(callback.death, self.death_callback, self)
+	else
+		local sim = _G.sim
+		sim:release(sim:object(obj:id()), true)
+	end
+	return true
+end
+
+function crow_binder:net_destroy()
+	local obj = self.object
+	obj:set_callback(callback.death, nil)
+	db.del_obj(obj)
+	object_binder.net_destroy(self)
+end
+
+local object_binder_update = object_binder.update
+
+function crow_binder:update(delta)
+	object_binder_update(self, delta)
+	local death_time = self.death_time
+	if death_time and game.get_game_time():diffSec(death_time) >= 1200 then -- 10 * 120 seconds = 1200 game-seconds
+		local sim = _G.sim
+		sim:release(sim:object(self.object:id()), true)
+	end
+end
+
+--------------------------------------------------------------------------------
+
+function crow_binder:death_callback()
+	self.death_time = game.get_game_time()
+	local obj = self.object
+	local obj_id = obj:id()
+	obj:set_callback(callback.death, nil)
+	if crow_storage[obj_id] ~= nil then
+		crow_storage[obj_id] = nil
+		crow_counter = crow_counter - 1
+	end
+	minigames_manager.get_minigames_manager():increase_killed_crow_counter()
+end
+
+--------------------------------------------------------------------------------
+
+function crow_binder:net_save_relevant()
+	return true
+end
+
+function crow_binder:save(package)
+	set_save_marker(package, "save", false, "crow_binder")
+	object_binder.save(self, package)
+	xr_logic.save_obj(self.object, package)
+	utils.w_CTime(package, self.death_time)
+	set_save_marker(package, "save", true, "crow_binder")
+end
+
+function crow_binder:load(reader)
+	set_save_marker(reader, "load", false, "crow_binder")
+	object_binder.load(self, reader)
+	xr_logic.load_obj(self.object, reader)
+	self.death_time = utils.r_CTime(reader)
+	set_save_marker(reader, "load", true, "crow_binder")
+end
