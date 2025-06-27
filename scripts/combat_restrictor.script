@@ -1,0 +1,43 @@
+local combat_sectors = {}
+
+function register_combat_restrictor(restrictor)
+	local restr_name = restrictor:name()
+	if combat_sectors[restr_name] == nil then
+		combat_sectors[restr_name] = restrictor
+	end
+end
+
+function accessible_job(se_npc, way_name)
+
+	local npc = db.storage[se_npc.id]
+	npc = npc and npc.object
+
+	if npc == nil then
+		return false
+	end
+
+	local npc_position = npc:position()
+	local job_position = patrol(way_name):point(0)
+	local is_npc_inside = false
+
+	for _, restr in pairs (combat_sectors) do
+		if restr:inside(npc_position) then
+			is_npc_inside = true
+			if restr:inside(job_position) then
+				return true
+			end
+		end
+	end
+
+	return is_npc_inside == false
+end
+
+function get_job_restrictor(way_name)
+	local job_position = patrol(way_name):point(0)
+	for restr_name, restr in pairs (combat_sectors) do
+		if restr:inside(job_position) then
+			return ","..restr_name
+		end
+	end
+	return ""
+end

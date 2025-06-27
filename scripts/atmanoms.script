@@ -1,0 +1,307 @@
+----------------------------------------------------
+-- file : atmanoms
+-- copyright (c) 2009 Atempad  (atem.pad@mail.ru) 
+-- "Dynamic anomalies for ClearSky" v 1.0 beta
+-----------------------------------------------------
+
+----------------------------------------------------------------------------------
+-- Func: Print message in log file
+----------------------------------------------------------------------------------
+function prnt(msg)
+end
+
+----------------------------------------------------------------------------------
+-- Func: Build of debug message
+----------------------------------------------------------------------------------
+function get_data(sobj)
+end
+
+
+local level_vertexes = {
+	marsh=528961,
+	garbage=358066,
+	escape=624951,
+	darkvalley=360974,
+	red_forest=164829,
+	agroprom=375233,
+	yantar=147712,
+	military=385322,
+	agroprom_underground=5348,
+	limansk=61524,
+	stancia_2=203361,
+	hospital=7865
+}
+
+local game_vertexes = {
+	marsh={0,244},
+	garbage={245,471},
+	escape={472,742},
+	darkvalley={743,960},
+	red_forest={961,1056},
+	agroprom={1057,1211},
+	yantar={1212,1312},
+	military={1313,1510},
+	agroprom_underground={1511,1523},
+	limansk={1524,1564},	
+	stancia_2={1565,1572},
+	hospital={1573,1619}
+}
+
+local level_params = {
+	marsh={true,50,{mincer={50,50,30,20},mbald={50,50,30,20},gravi={50,50,30,10},buzz={120,30,30,30}}},	
+	agroprom={true,50,{mincer={40,40,50,35},gravi={40,40,50,35},mbald={40,40,50,35},wgalant={30,30,40,50},zharka={30,30,40,50}}},
+	escape={true,50,{mincer={50,50,30,20},mbald={50,50,30,20},gravi={50,50,30,10},wgalant={30,30,40,50}}},
+	garbage={true,50,{mincer={50,50,30,20},mbald={50,50,30,20},gravi={50,50,30,10},wgalant={30,30,40,50},zharka={100,10,40,70}}},
+	darkvalley={true,55,{mincer={50,10,50,40},mbald={50,10,40,40},gravi={50,10,40,40},wgalant={100,0,30,70},zharka={100,0,30,70}}},
+	yantar={true,30,{mincer={40,0,65,35},gravi={40,0,65,35},mbald={40,0,65,35},wgalant={30,0,40,60},zharka={30,0,40,60}}},
+	military={true,55,{mincer={40,0,50,50},gravi={40,0,50,50},mbald={40,0,50,50},wgalant={30,0,50,50},zharka={30,0,50,50}}},
+	red_forest={true,50,{mincer={40,0,0,100},gravi={40,0,0,100},mbald={40,0,0,100},wgalant={30,0,0,100},zharka={30,0,0,100}}}
+}
+
+local type_anoms = {
+	mincer = {"zone_mincer_weak", "zone_mincer_average", "zone_mincer_strong"}, 
+	gravi = {"zone_gravi_zone_weak", "zone_gravi_zone_average", "zone_gravi_zone_strong"},
+	mbald = {"zone_mosquito_bald_weak", "zone_mosquito_bald_average", "zone_mosquito_bald_strong"},
+	wgalant = {"zone_witches_galantine_weak","zone_witches_galantine_average","zone_witches_galantine_strong"},
+	zharka = {"zone_zharka_static_weak","zone_zharka_static_average","zone_zharka_static_strong"},
+	buzz = {"zone_buzz_weak","zone_buzz_average","zone_buzz_strong"}
+}
+
+local safe_zones = {
+	marsh = {{63791,100},{420089,30},{153675,30},{204877,30},{104074,30},{157799,30},{137204,30},{219585,30},
+		{321391,30},{213236,30},{312427,30},{380741,30},{487162,30},{327129,30},{69585,30},{121282,30},{185737,30},
+		{249350,30},{366274,30},{111403,30},{198687,30},{300171,30},{415374,30},{49668,30},{224335,30},{445400,30},
+		{521878,30},{42828,30},{5525,30}},
+	agroprom = {{19492,25},{80754,25},{143701,25},{208792,25},{275878,25},{15064,25},{55204,25},{149993,130},
+		{359154,25},{351314,25},{45513,25},{141248,25},{36347,130},{235226,25},{346512,25},{169988,25},{217292,25},
+		{345359,25},{159538,25},{116796,25},{22541,25},{52952,25},{203765,25}},
+	darkvalley = {{9977,25},{285855,25},{207250,25},{21080,25},{153582,25},{6278,25},{63858,25},{156905,25},
+		{31693,25},{192041,25},{305716,25},{340420,25},{220190,25},{263859,25},{172349,150},{117203,25},{309793,25},
+		{103533,25},{39559,25},{347057,25},{207602,25},{166937,25},{110443,25},{282839,25}},
+	escape = {{332893,25},{389616,25},{369532,25},{370343,25},{448181,25},{192333,25},{178808,25},{330413,25},
+		{438674,25},{298070,25},{41691,25},{179700,25},{333828,25},{54937,130},{153795,25},{262244,25},{32292,25},
+		{120487,80},{598831,25},{532023,25},{600839,25},{96728,25}},
+	garbage = {{197501,25},{249036,25},{312606,25},{349860,25},{236918,25},{152410,25},{113942,120},{66944,25},
+		{12451,25},{97133,25},{302960,25},{235909,25},{304531,25},{354743,25},{343092,25},{293409,25},{251586,25},
+		{200421,25},{172262,25},{160774,25},{116329,25},{100347,130},{78533,25},{15304,25},{20530,25},{250389,25},
+		{37438,25},{78407,25}},
+	yantar = {{15291,25},{5978,25},{38936,25},{67352,25},{108124,25},{143493,25},{73191,25},{105291,25},
+		{141285,25},{102598,25},{71607,25},{57255,25},{130827,25},{35859,80},{4457,80},{25291,80},{18751,80},
+		{73938,80},{15980,80},{139237,50},{57454,80},{54408,50}},
+	military = {{4245,25},{70155,25},{136598,25},{261043,25},{13901,25},{171751,25},{332415,25},{18728,25},
+		{81761,25},{209551,25},{259706,25},{312324,25},{365253,25},{175946,25},{279348,25},{20875,25},{89354,25},
+		{46318,25},{98353,25},{256826,25},{79753,25},{378810,25},{283350,25},{356663,25},{219870,25},{86075,25},
+		{184366,25},{321094,25}},
+	red_forest = {{4590,60},{1990,60},{7998,50},{5646,25},{19099,25},{68315,25},{14665,25},{76405,25},
+		{39522,25},{128738,25},{117189,25},{87463,25},{125116,25},{140429,25},{27953,25},{87518,25}}
+}
+
+local anoms_valid = {
+	["zone_mincer_weak"] = true, 
+	["zone_mincer_average"] = true, 
+	["zone_mincer_strong"] = true, 
+	["zone_gravi_zone_weak"] = true, 
+	["zone_gravi_zone_average"]	= true, 
+	["zone_gravi_zone_strong"] = true,
+	["zone_mosquito_bald_weak"]	= true, 
+	["zone_mosquito_bald_average"] = true, 
+	["zone_mosquito_bald_strong"] = true,
+	["zone_witches_galantine_weak"]	= true,
+	["zone_witches_galantine_average"] = true,
+	["zone_witches_galantine_strong"] = true,
+	["zone_zharka_static_weak"]	= true,
+	["zone_zharka_static_average"] = true,
+	["zone_zharka_static_strong"] = true,
+	["zone_buzz_weak"] = true,
+	["zone_buzz_average"] = true,
+	["zone_buzz_strong"] = true
+}
+
+----------------------------------------------------------------------------------
+-- Class: Dynamic anomalies.
+----------------------------------------------------------------------------------
+class "dynanoms"
+function dynanoms:__init()
+	self.level_name = level.name();
+	self.level_params = level_params[self.level_name]; -- random
+	self.level_vertexes = level_vertexes[self.level_name]; 
+	self.game_vertexes = game_vertexes[self.level_name];
+	self.safe_zones = safe_zones[self.level_name]; 
+	self.anoms = {}; 
+	if self.level_params and self.level_params[1]==true and self.level_vertexes and 
+	self.game_vertexes and self.safe_zones then
+		self.valid = true;
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Blowout. Reload anoms.
+------------------------------------------------------------------------------------------------
+function dynanoms:blowout_spawn()
+	self:controller_anoms("clear", "all", "all", "atm");
+	self:level_spawn();	
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Filling level by anoms.
+------------------------------------------------------------------------------------------------
+function dynanoms:level_spawn()		
+	self:controller_anoms("check", self.level_name, "all", "atm");
+	if #self.anoms == 0 then
+		self:anoms_creator();
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Creator of anomalies. 
+------------------------------------------------------------------------------------------------
+function dynanoms:anoms_creator()
+	if not self.valid then 
+		return 
+	end	
+	local amount = self.level_params[2]; --amount of cycles
+	local anoms_list = self.level_params[3]; --sublist of accessible anomalies	
+	for i = 1, amount do
+		local spawnend = false;
+		local attempt = 0;
+		while spawnend==false and attempt<8 do
+			attempt = attempt + 1;
+			local lvid = math.random(1, self.level_vertexes);
+			local position = level.vertex_position(lvid);	
+			if self:check_safe_zones(position)==true then	
+				local gvid = self:search_game_graph(position);		
+				local anom_section = self:randomizer(anoms_list);		
+				if (anom_section and gvid) then
+					local sobj = alife():create(anom_section, position, lvid, gvid);				
+					self:rewrite_net_package(sobj, anom_section);
+					spawnend = true;
+--					atmdebug.logf("anoms_creator => create_object => "..anom_section);
+--					level.map_add_object_spot_ser(sobj.id, "alife_presentation_faction_monster", anom_section); -- red spot				
+				end
+			end	
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Checking an safe zones.
+------------------------------------------------------------------------------------------------
+function dynanoms:check_safe_zones(position_anom)
+	for i = 1, #self.safe_zones do
+		local zone = self.safe_zones[i];
+		if zone and zone[1] and zone[2] then
+			local position_vertex = level.vertex_position(zone[1]);
+			if position_vertex and position_vertex:distance_to(position_anom) <= zone[2] + 7 then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Search of game graph for level vertex.
+------------------------------------------------------------------------------------------------
+function dynanoms:search_game_graph(position_anom)
+	local dist = nil;
+	local ggraph = game_graph();
+	local gvid_new = 0;
+	local gvid_min = self.game_vertexes[1];
+	local gvid_max = self.game_vertexes[2];
+	for gvid = gvid_min, gvid_max do
+		if ggraph:valid_vertex_id(gvid) then 
+			local position_ggraph = level.vertex_position(ggraph:vertex(gvid):level_vertex_id()); 
+			if dist == nil or position_anom:distance_to(position_ggraph) < dist then
+				dist = position_anom:distance_to(position_ggraph);
+				gvid_new = gvid;
+			end
+		end
+	end	
+--	atmdebug.logf("search_game_graph => "..gvid_new);
+	return gvid_new;
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Randomizer.
+------------------------------------------------------------------------------------------------
+function dynanoms:randomizer(rnd_types)
+	local sum = 0;
+	local anom_type = nil;
+	local anom_subtype = nil;
+	local rnd_subtypes = nil;
+	
+	for key,val in pairs(rnd_types) do
+		sum = sum + val[1];
+	end
+	sum = math.random(sum);
+	for key,val in pairs(rnd_types) do	
+		sum = sum - val[1];
+		anom_type = key;
+		if sum < 1 then break end
+	end
+	
+	sum = 0;
+	rnd_subtypes = rnd_types[anom_type];
+	for i = 2, #rnd_subtypes do
+		sum = sum + rnd_subtypes[i];
+	end
+	sum = math.random(sum);
+	for i = 2, #rnd_subtypes do
+		sum = sum - rnd_subtypes[i];
+		anom_subtype = type_anoms[anom_type][i-1];
+		if sum < 1 then break end
+	end	
+--	atmdebug.logf("randomizer => "..anom_subtype);
+	return anom_subtype;
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Control after anomalies. Cleaning, search.
+------------------------------------------------------------------------------------------------
+function dynanoms:controller_anoms(key, lvl, anom, cdkey)
+	if key == nil then return; end -- error, key a nil value
+	if lvl == nil then lvl = level.name(); end
+	if anom == nil then anom = "all"; end	
+	local cd = nil;	-- custom data value	
+	for id = 1, 65534 do
+		local sobj = alife():object(id); -- get sobject
+		if sobj and sobj:section_name() and anoms_valid[sobj:section_name()]==true then
+			local section = sobj:section_name();
+			local level_id = game_graph():vertex(sobj.m_game_vertex_id):level_id();
+			local level_name = alife():level_name(level_id); -- get level name												
+			if cdkey then				
+				local tbl = atmpackages.get_zone_anom(sobj);	
+				cd = string.find(tbl.custom_data, cdkey); -- get custom data
+			end 			
+			if (anom=="all") or (anom and string.find(section, anom)) then
+				if (lvl=="all") or (lvl==level_name) then
+					if (cd and cdkey) or (cd==nil and cdkey==nil) then
+						if key=="clear" then
+--							atmdebug.logf("clear."..anom.."."..lvl.." => "..tostring(get_data(sobj)));
+							alife():release(sobj, true);
+						elseif key=="check" then
+--							atmdebug.logf("check."..anom.."."..lvl.." => "..tostring(get_data(sobj)));
+							table.insert(self.anoms, sobj.id);
+						end
+					end
+				end
+			end	
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Rewrite of net package.
+------------------------------------------------------------------------------------------------
+function dynanoms:rewrite_net_package(sobj,section)	
+	local tbl = atmpackages.get_zone_anom(sobj);
+	tbl.shape[1]={}
+	tbl.shape[1].stype = 0;
+	tbl.shape[1].center = vector():set(0,0,0);
+	tbl.shape[1].radius = 4; 
+	tbl.custom_data = "atm";
+	atmpackages.set_zone_anom(tbl,sobj);
+end
+
+
+--" Suum cuique ... "

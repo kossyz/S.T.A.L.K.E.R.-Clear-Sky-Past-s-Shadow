@@ -1,0 +1,31 @@
+local names = {
+	["esc_"] = " (Кордон)",
+	["gar_"] = " (Свалка)",
+	["agr_"] = " (Агропром)",
+	["agru"] = " (НИИ-п)",
+	["dark"] = " (Т. Долина)",		-- обычные
+	["val_"] = " (Т. Долина)",		-- покупные
+	["ros_"] = " (Д. терр.)",
+	["yant"] = " (Янтарь)",			-- обычные
+	["yan_"] = " (Янтарь)",			-- покупные
+	["mil_"] = " (В. Склады)",
+
+	["mar_"] = " (Болота)",
+	["red_"] = " (Рыжий лес)",	
+	["lim_"] = " (Лиманск)",
+	["hos_"] = " (Госпиталь)"
+		}
+
+
+-- // [treasure_manager] CTreasure:give_treasure() // --
+function area_name(link)
+	local text = ""
+	for k, v in pairs(names) do
+		if k == string.sub(link, 1, 4) then
+			text = v
+			break
+		end
+	end
+
+	return text
+end

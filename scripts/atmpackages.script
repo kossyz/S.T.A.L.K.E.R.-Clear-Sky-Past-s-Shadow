@@ -1,0 +1,171 @@
+----------------------------------------------------
+-- atmpackages file
+-- copyright (c) 2009 Atempad  
+-- atem.pad@mail.ru
+-----------------------------------------------------
+
+local packet = net_packet();
+
+-- net package reader for "se_zone_anom"
+function get_zone_anom(sobj)
+    packet:w_begin(0);
+	packet:r_seek(2);
+	sobj:STATE_Write(packet);
+	local tbl={}	
+	read_anomalous_zone(tbl, packet);
+	tbl.last_spawn_time_present = packet:r_u8();
+	return tbl;
+end
+
+-- net package writer for "se_zone_anom"
+function set_zone_anom(tbl,sobj)
+    packet:w_begin(0);
+	packet:r_seek(2);
+	write_anomalous_zone(tbl,packet);
+	packet:w_u8(tbl.last_spawn_time_present);
+	local size = packet:w_tell();
+    sobj:STATE_Read(packet,size);
+end
+
+-- net package reader for "cse_alife_torrid_zone"
+function get_torrid_zone(sobj)
+    packet:w_begin(0);
+	packet:r_seek(2);
+	sobj:STATE_Write(packet);
+	local tbl={}	
+	read_custom_zone(tbl, packet);
+	read_motion(tbl, packet);
+	return tbl;
+end
+
+-- net package writer for "cse_alife_torrid_zone"
+function set_torrid_zone(tbl,sobj)
+    packet:w_begin(0);
+	packet:r_seek(2);
+	write_custom_zone(tbl, packet);
+	write_motion(tbl, packet);
+	local size = packet:w_tell();
+    sobj:STATE_Read(packet,size);
+end
+
+
+--read_motion
+function read_motion(tbl, packet)
+	tbl.motion_name = packet:r_stringZ();
+	return tbl;
+end
+
+--write_motion
+function write_motion(tbl, packet)
+	packet:w_stringZ(tbl.motion_name);
+end
+
+--read_anomalous_zone
+function read_anomalous_zone(tbl, packet)
+	read_custom_zone(tbl, packet);
+	tbl.offline_interactive_radius = packet:r_float();
+	tbl.artefact_spawn_count = packet:r_u16();
+	tbl.artefact_position_offset = packet:r_s32();
+	return tbl;
+end
+
+--write_anomalous_zone
+function write_anomalous_zone(tbl, packet)
+	write_custom_zone(tbl, packet);
+	packet:w_float(tbl.offline_interactive_radius);
+	packet:w_u16(tbl.artefact_spawn_count);
+	packet:w_s32(tbl.artefact_position_offset);
+end
+
+--read_custom_zone
+function read_custom_zone(tbl, packet)
+	read_space_restrictor(tbl, packet);
+	tbl.max_power = packet:r_float();
+	tbl.owner_id = packet:r_s32();
+	tbl.enabled_time = packet:r_s32();
+	tbl.disabled_time = packet:r_s32();
+	tbl.start_time_shift = packet:r_s32();	
+	return tbl;	
+end
+
+--write_custom_zone
+function write_custom_zone(tbl, packet)
+	write_space_restrictor(tbl, packet);
+	packet:w_float(tbl.max_power);
+	packet:w_s32(tbl.owner_id);
+	packet:w_s32(tbl.enabled_time);
+	packet:w_s32(tbl.disabled_time);
+	packet:w_s32(tbl.start_time_shift);		
+end
+
+--read_space_restrictor
+function read_space_restrictor(tbl, packet)
+	read_object(tbl,packet);
+	read_shape(tbl,packet);
+	tbl.restrictor_type	= packet:r_u8();
+	return tbl;
+end
+
+--write_space_restrictor
+function write_space_restrictor(tbl, packet)
+	write_object(tbl,packet);
+	write_shape(tbl,packet);
+	packet:w_u8(tbl.restrictor_type);
+end
+
+--read_object
+function read_object(tbl,packet)
+	tbl.gvid = packet:r_u16();
+	tbl.dist = packet:r_float();
+	tbl.dir_control = packet:r_s32();
+	tbl.lvid = packet:r_s32();
+	tbl.obj_flags = packet:r_s32();
+	tbl.custom_data = packet:r_stringZ();
+	tbl.sid = packet:r_s32();
+	tbl.spawn_sid = packet:r_s32();	
+	return tbl
+end
+
+--write_object
+function write_object(tbl,packet)
+	packet:w_u16(tbl.gvid);
+	packet:w_float(tbl.dist);
+	packet:w_s32(tbl.dir_control);
+	packet:w_s32(tbl.lvid);
+	packet:w_s32(tbl.obj_flags);
+	packet:w_stringZ(tbl.custom_data);
+	packet:w_s32(tbl.sid);
+	packet:w_s32(tbl.spawn_sid);
+end
+
+--read_shape
+function read_shape(tbl,packet)
+	local count = packet:r_u8();
+	tbl.shape = {}
+	for i = 1, count do
+		local stype = packet:r_u8();
+		tbl.shape[i] = {}
+		tbl.shape[i].stype = stype;
+		if stype == 0 then
+			tbl.shape[i].center = packet:r_vec3();
+			tbl.shape[i].radius = packet:r_float();
+		else
+			tbl.shape[i].box = packet:r_matrix();
+		end
+	end 
+	return tbl;
+end
+
+--write_shape
+function write_shape(tbl,packet)
+	packet:w_u8(#tbl.shape);
+	for i = 1, #tbl.shape do
+		packet:w_u8(tbl.shape[i].stype);
+		if tbl.shape[i].stype == 0 then
+			packet:w_vec3(tbl.shape[i].center);
+			packet:w_float(tbl.shape[i].radius);
+		else
+			packet:w_matrix(tbl.shape[i].box);
+		end
+	end
+end

@@ -1,0 +1,237 @@
+----------------------------------------------------
+-- file : atmmonster
+-- copyright (c) 2009 Atempad  (atem.pad@mail.ru) 
+-----------------------------------------------------
+
+local level_population = {
+	marsh={30,{boar={50,50,30,20},flesh={50,30,30,30},elit_bloodsucker={20,100,0,0}}},
+	garbage={20,{dog={50,50,25,25},flesh={35,30,30,30},pseudodog={30,50,30,20,5},boar={35,50,25,25},bloodsucker={20,80,20,10}}},
+	escape={30,{dog={50,50,25,25},flesh={50,30,30,30},pseudodog={30,50,30,20,5},boar={50,50,25,25}}},
+	darkvalley={30,{bloodsucker={40,40,30,30},elit_bloodsucker={40,20,40,40},snork={50,20,40,40,40},pseudodog={30,30,30,30,5}}},
+	red_forest={30,{elit_bloodsucker={60,0,50,50},gigant={20,0,100},pseudodog={50,0,0,70,30},boar={50,0,0,100}}},
+	agroprom={25,{dog={30,20,20,60},flesh={35,0,50,50},snork={35,0,30,30,30},boar={35,0,50,50},bloodsucker={20,0,50,50}}},
+	yantar={25,{snork={50,0,0,50,50},pseudodog={50,0,0,0,100}}},
+	military={30,{bloodsucker={40,0,0,100},snork={50,0,0,50,50},gigant={20,0,100},pseudodog={30,0,30,30,5}}},
+	agroprom_underground={0,{}},
+	limansk={0,{}},
+	stancia_2={0,{}},
+	hospital={0,{}}
+}
+
+local level_vertexes = {
+	marsh=528961,
+	garbage=358066,
+	escape=624951,
+	darkvalley=360974,
+	red_forest=164829,
+	agroprom=375233,
+	yantar=147712,
+	military=385322,
+	agroprom_underground=5348,
+	limansk=61524,
+	stancia_2=203361,
+	hospital=7865
+}
+
+local game_vertexes = {
+	marsh={0,244},
+	garbage={245,471},
+	escape={472,742},
+	darkvalley={743,960},
+	red_forest={961,1056},
+	agroprom={1057,1211},
+	yantar={1212,1312},
+	military={1313,1510},
+	agroprom_underground={1511,1523},
+	limansk={1524,1564},	
+	stancia_2={1565,1572},
+	hospital={1573,1619}
+}
+
+local safe_zones = {
+	marsh = {{63791,200},{420089,30},{153675,30},{204877,30},{104074,30},{157799,30},{137204,30},{219585,30},
+		{321391,30},{213236,30},{312427,30},{380741,30},{487162,30},{327129,30},{69585,30},{121282,30},{185737,30},
+		{249350,30},{366274,30},{111403,30},{198687,30},{300171,30},{415374,30},{49668,30},{224335,30},{445400,30},
+		{521878,30},{42828,30},{5525,30}},
+	agroprom = {{19492,30},{80754,30},{143701,30},{208792,30},{275878,30},{15064,30},{55204,30},{149993,130},
+		{359154,30},{351314,30},{45513,30},{141248,30},{36347,130},{235226,30},{346512,30},{169988,30},{217292,30},
+		{345359,30},{159538,30},{116796,30},{22541,30},{52952,30},{203765,30}},
+	darkvalley = {{9977,30},{285855,30},{207250,30},{21080,30},{153582,30},{6278,30},{63858,30},{156905,30},
+		{31693,30},{192041,30},{305716,30},{340420,30},{220190,30},{263859,30},{172349,150},{117203,30},{309793,30},
+		{103533,30},{39559,30},{347057,30},{207602,30},{166937,30},{110443,30},{282839,30}},
+	escape = {{332893,30},{389616,30},{369532,30},{370343,30},{448181,30},{192333,30},{178808,30},{330413,30},
+		{438674,30},{298070,30},{41691,30},{179700,30},{333828,30},{54937,130},{153795,30},{262244,30},{32292,30},
+		{120487,80},{598831,30},{532023,30},{600839,30},{96728,30}},
+	garbage = {{197501,30},{249036,30},{312606,30},{349860,30},{236918,30},{152410,30},{113942,120},{66944,30},
+		{12451,30},{97133,30},{302960,30},{235909,30},{304531,30},{354743,30},{343092,30},{293409,30},{251586,30},
+		{200421,30},{172262,30},{160774,30},{116329,30},{100347,130},{78533,30},{15304,30},{20530,30},{250389,30},
+		{37438,30},{78407,30}},
+	yantar = {{15291,30},{5978,30},{38936,30},{67352,30},{108124,30},{143493,30},{73191,30},{105291,30},
+		{141285,30},{102598,30},{71607,30},{57255,30},{130827,30},{35859,80},{4457,80},{25291,80},{18751,80},
+		{73938,80},{15980,80},{139237,30},{57454,80},{54408,30}},
+	military = {{4245,30},{70155,30},{136598,30},{261043,30},{13901,30},{171751,30},{332415,30},{18728,30},
+		{81761,30},{209551,30},{259706,30},{312324,30},{365253,30},{175946,30},{279348,30},{20875,30},{89354,30},
+		{46318,30},{98353,30},{256826,30},{79753,30},{378810,30},{283350,30},{356663,30},{219870,30},{86075,30},
+		{184366,30},{321094,30}},
+	red_forest = {{4590,60},{1990,60},{7998,30},{5646,30},{19099,30},{68315,30},{14665,30},{76405,30},
+		{39522,30},{128738,30},{117189,30},{87463,30},{125116,30},{140429,30},{27953,30},{87518,30}}
+}
+
+
+local monsters = {
+	bloodsucker = {"bloodsucker_weak","bloodsucker_normal","bloodsucker_strong"},
+	elit_bloodsucker = {"bloodsucker_jumper_deadly","bloodsucker_redforest","bloodsucker_redhunter"},
+	boar = {"boar_weak","boar_normal","boar_strong"},
+	dog = {"dog_weak","dog_normal","dog_strong"},
+	flesh = {"flesh_weak","flesh_normal","flesh_strong"},
+	gigant = {"gigant_normal","gigant_strong"},
+	poltergeist = {"m_poltergeist_normal_tele","m_poltergeist_normal_flame","m_poltergeist_strong_flame"},
+	pseudodog = {"pseudodog_weak","pseudodog_normal","pseudodog_strong","psy_dog"},
+	snork = {"snork_weak","snork_normal","snork_strong","snork_indoor","snork_jumper"}
+}
+
+----------------------------------------------------------------------------------
+-- Class: Simulation of monsters.
+----------------------------------------------------------------------------------
+class "sim_monsters"
+function sim_monsters:__init()
+	self.level_name = level.name();
+	self.population = level_population[self.level_name][1];
+	self.monster_list = level_population[self.level_name][2];
+	self.level_vertexes = level_vertexes[self.level_name]; 
+	self.game_vertexes = game_vertexes[self.level_name];
+	self.safe_zones = safe_zones[self.level_name]; 
+	self.free_monsters = {};
+	if self.level_vertexes and self.game_vertexes and self.safe_zones and 
+	self.population>0 and self.monster_list then
+--		atmdebug.logf("sim_monsters => init => truevalid");
+		self.valid = true;
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Spawning of monsters on level.
+------------------------------------------------------------------------------------------------
+function sim_monsters:level_spawn()		
+	self:search_monsters();
+	if #self.free_monsters < self.population / 3 then
+		self:mutants_creator();
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Search of free monsters.
+------------------------------------------------------------------------------------------------
+function sim_monsters:search_monsters()
+	for id = 1, 65534 do
+		local sobj = alife():object(id); -- get sobject
+		if sobj and IsMonster(sobj) then
+			local level_id = game_graph():vertex(sobj.m_game_vertex_id):level_id();
+			local level_name = alife():level_name(level_id); -- get level name
+			if self.level_name == level_name and sobj.m_smart_terrain_id == 65535 and sobj:alive() then
+--				atmdebug.logf("sim_monsters => search_monsters => monstersid="..sobj.id);
+				table.insert(self.free_monsters, sobj.id);
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Monsters creator.
+------------------------------------------------------------------------------------------------
+function sim_monsters:mutants_creator()
+	if not self.valid then return end
+	local amount = self.population - #self.free_monsters;
+	if amount < 1 then
+		return;
+	end
+	for i = 1, amount do
+		local spawnend = false;
+		local attempt = 0;
+		while spawnend==false and attempt<8 do
+			attempt = attempt + 1;
+			local lvid = math.random(1, self.level_vertexes);
+			local position = level.vertex_position(lvid);
+			if self:check_safe_zones(position)==true then	
+				local gvid = self:search_game_graph(position);
+				local monster_section = self:randomizer(self.monster_list);
+				if gvid and monster_section then
+					local sobj = alife():create(monster_section, position, lvid, gvid);
+					spawnend = true;			
+				end
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Checking an safe zones.
+------------------------------------------------------------------------------------------------
+function sim_monsters:check_safe_zones(mutant_pos)
+	for i = 1, #self.safe_zones do
+		local zone = self.safe_zones[i];
+		if zone and zone[1] and zone[2] then
+			local position_vertex = level.vertex_position(zone[1]);
+			if position_vertex and position_vertex:distance_to(mutant_pos) <= zone[2] + 7 then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Search of game graph for level vertex.
+------------------------------------------------------------------------------------------------
+function sim_monsters:search_game_graph(mutant_pos)
+	local dist = nil;
+	local ggraph = game_graph();
+	local gvid_new = 0;
+	local gvid_min = self.game_vertexes[1];
+	local gvid_max = self.game_vertexes[2];
+	for gvid = gvid_min, gvid_max do
+		if ggraph:valid_vertex_id(gvid) then 
+			local position_ggraph = level.vertex_position(ggraph:vertex(gvid):level_vertex_id()); 
+			if dist == nil or mutant_pos:distance_to(position_ggraph) < dist then
+				dist = mutant_pos:distance_to(position_ggraph);
+				gvid_new = gvid;
+			end
+		end
+	end	
+--	atmdebug.logf("search_game_graph => "..gvid_new);
+	return gvid_new;
+end
+
+------------------------------------------------------------------------------------------------
+-- Func: Randomizer.
+------------------------------------------------------------------------------------------------
+function sim_monsters:randomizer(rnd_types)
+	local sum = 0;
+	local monster_type = nil;
+	local monster_subtype = nil;
+	local rnd_subtypes = nil;
+	
+	for key,val in pairs(rnd_types) do
+		sum = sum + val[1];
+	end
+	sum = math.random(sum);
+	for key,val in pairs(rnd_types) do	
+		sum = sum - val[1];
+		monster_type = key;
+		if sum < 1 then break end
+	end
+	
+	sum = 0;
+	rnd_subtypes = rnd_types[monster_type];
+	for i = 2, #rnd_subtypes do
+		sum = sum + rnd_subtypes[i];
+	end
+	sum = math.random(sum);
+	for i = 2, #rnd_subtypes do
+		sum = sum - rnd_subtypes[i];
+		monster_subtype = monsters[monster_type][i-1];
+		if sum < 1 then break end
+	end	
+--	atmdebug.logf("randomizer => "..monster_subtype);
+	return monster_subtype;
+end

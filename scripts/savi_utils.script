@@ -1,0 +1,41 @@
+-----------------------------------------------------------------------------
+-- savi_utils.script
+-- Автосохранения после получения миссии для сталкер Чистое небо 
+-- 01.07.2022 0.1
+-- Автор: SaViMoN
+-----------------------------------------------------------------------------
+
+--
+-- 
+--
+function printf(str,...)
+	if not str then
+		str = "((string is nil))"
+	end
+	get_console():execute("load ~#I#:"..string.format(str,...))
+end
+
+--
+-- 
+--
+function isGameOn()
+	if level.present() and db.actor ~= nil and db.actor:alive() then
+		return true
+	end
+	return false
+end
+
+--
+-- Запуск сейва (save)
+--
+function savegame(save_name)
+	if save_name == nil then
+		printf("Попытка сохранить игру без имени!")
+		return false
+	end
+
+	if isGameOn() then
+		local save_param = user_name().." - "..save_name
+		get_console():execute("save "..save_param)
+	end
+end
